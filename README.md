@@ -26,23 +26,23 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 | Model |  Code | Reference |
 |-------|-----|-----------|
-| Logistic Regression | LR, [lr.py](https://github.com/solopku/ARM-Net/blob/main/models/lr.py) | |
-| Factorization Machine | FM, [fm.py](https://github.com/solopku/ARM-Net/blob/main/models/fm.py) | [S Rendle, Factorization Machines, 2010.](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) |
-| Attentional Factorization Machine | AFM, [afm.py](https://github.com/solopku/ARM-Net/blob/main/models/afm.py) | [J Xiao, et al. Attentional Factorization Machines: Learning the Weight of Feature Interactions via Attention Networks, 2017.](https://arxiv.org/abs/1708.04617) |
-| Higher-Order Factorization Machines | HOFM, [hofm.py](https://github.com/solopku/ARM-Net/blob/main/models/hofm.py) | [ M Blondel, et al. Higher-Order Factorization Machines, 2016.](https://dl.acm.org/doi/10.5555/3157382.3157473) |
-| Deep Neural Network | DNN, [dnn.py](https://github.com/solopku/ARM-Net/blob/main/models/dnn.py) | |
-| Graph Convolutional Networks | GCN, [gcn.py](https://github.com/solopku/ARM-Net/blob/main/models/gcn.py) | [T Kipf, et al. Semi-Supervised Classification with Graph Convolutional Networks, 2016.](https://arxiv.org/abs/1609.02907)|
-| Graph Convolutional Networks | GAT, [gat.py](https://github.com/solopku/ARM-Net/blob/main/models/gat.py) | [P Veličković, et al. Graph Attention Networks, 2017.](https://arxiv.org/abs/1710.10903)|
-| Wide&Deep | Wide&Deep, [wd.py](https://github.com/solopku/ARM-Net/blob/main/models/wd.py) | [HT Cheng, et al. Wide & Deep Learning for Recommender Systems, 2016.](https://arxiv.org/abs/1606.07792) |
-| Product Neural Network | IPNN/KPNN, [pnn.py](https://github.com/solopku/ARM-Net/blob/main/models/pnn.py) | [Y Qu, et al. Product-based Neural Networks for User Response Prediction, 2016.](https://arxiv.org/abs/1611.00144) |
-| Neural Factorization Machine | NFM, [nfm.py](https://github.com/solopku/ARM-Net/blob/main/models/nfm.py) | [X He and TS Chua, Neural Factorization Machines for Sparse Predictive Analytics, 2017.](https://arxiv.org/abs/1708.05027) |
-| DeepFM | DeepFM, [dfm.py](https://github.com/solopku/ARM-Net/blob/main/models/dfm.py) | [H Guo, et al. DeepFM: A Factorization-Machine based Neural Network for CTR Prediction, 2017.](https://arxiv.org/abs/1703.04247) |
-| Deep & Cross Network | DCN/DCN+, [dcn.py](https://github.com/solopku/ARM-Net/blob/main/models/dcn.py) | [R Wang, et al. Deep & Cross Network for Ad Click Predictions, 2017.](https://arxiv.org/abs/1708.05123) |
-| Gated Linear Unit | SA_GLU, [sa_glu.py](https://github.com/solopku/ARM-Net/blob/main/models/sa_glu.py) | [Y N. Dauphin, et al. Language Modeling with Gated Convolutional Networks, 2017](https://arxiv.org/abs/1612.08083) |
-| xDeepFM | CIN/xDeepFM, [xdfm.py](https://github.com/solopku/ARM-Net/blob/main/models/xdfm.py) | [J Lian, et al. xDeepFM: Combining Explicit and Implicit Feature Interactions for Recommender Systems, 2018.](https://arxiv.org/abs/1803.05170) |
-| Context-Aware Self-Attention Network | GC_ARM, [gc_arm.py](https://github.com/solopku/ARM-Net/blob/main/models/gc_arm.py) | [B Yang, et al. Context-Aware Self-Attention Networks, 2019](https://arxiv.org/abs/1902.05766) |
-| AFN | AFN/AFN+, [afn.py](https://github.com/solopku/ARM-Net/blob/main/models/afn.py) | [W Cheng, et al. Adaptive Factorization Network: Learning Adaptive-Order Feature Interactions, 2020.](https://arxiv.org/abs/1909.03276) |
-| ARM-Net | ARM-Net/ARM-Net+, [armnet.py](https://github.com/solopku/ARM-Net/blob/main/models/armnet.py) | [S Cai, et al. ARM-Net: Adaptive Relation Modeling Network for Structured Data, 2021.](https://dl.acm.org/doi/10.1145/3448016.3457321) |
+| Logistic Regression | LR, [lr.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/lr.py) | |
+| Factorization Machine | FM, [fm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/fm.py) | [S Rendle, Factorization Machines, 2010.](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) |
+| Attentional Factorization Machine | AFM, [afm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afm.py) | [J Xiao, et al. Attentional Factorization Machines: Learning the Weight of Feature Interactions via Attention Networks, 2017.](https://arxiv.org/abs/1708.04617) |
+| Higher-Order Factorization Machines | HOFM, [hofm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/hofm.py) | [ M Blondel, et al. Higher-Order Factorization Machines, 2016.](https://dl.acm.org/doi/10.5555/3157382.3157473) |
+| Deep Neural Network | DNN, [dnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dnn.py) | |
+| Graph Convolutional Networks | GCN, [gcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gcn.py) | [T Kipf, et al. Semi-Supervised Classification with Graph Convolutional Networks, 2016.](https://arxiv.org/abs/1609.02907)|
+| Graph Convolutional Networks | GAT, [gat.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gat.py) | [P Veličković, et al. Graph Attention Networks, 2017.](https://arxiv.org/abs/1710.10903)|
+| Wide&Deep | Wide&Deep, [wd.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/wd.py) | [HT Cheng, et al. Wide & Deep Learning for Recommender Systems, 2016.](https://arxiv.org/abs/1606.07792) |
+| Product Neural Network | IPNN/KPNN, [pnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/pnn.py) | [Y Qu, et al. Product-based Neural Networks for User Response Prediction, 2016.](https://arxiv.org/abs/1611.00144) |
+| Neural Factorization Machine | NFM, [nfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/nfm.py) | [X He and TS Chua, Neural Factorization Machines for Sparse Predictive Analytics, 2017.](https://arxiv.org/abs/1708.05027) |
+| DeepFM | DeepFM, [dfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dfm.py) | [H Guo, et al. DeepFM: A Factorization-Machine based Neural Network for CTR Prediction, 2017.](https://arxiv.org/abs/1703.04247) |
+| Deep & Cross Network | DCN/DCN+, [dcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dcn.py) | [R Wang, et al. Deep & Cross Network for Ad Click Predictions, 2017.](https://arxiv.org/abs/1708.05123) |
+| Gated Linear Unit | SA_GLU, [sa_glu.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/sa_glu.py) | [Y N. Dauphin, et al. Language Modeling with Gated Convolutional Networks, 2017](https://arxiv.org/abs/1612.08083) |
+| xDeepFM | CIN/xDeepFM, [xdfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/xdfm.py) | [J Lian, et al. xDeepFM: Combining Explicit and Implicit Feature Interactions for Recommender Systems, 2018.](https://arxiv.org/abs/1803.05170) |
+| Context-Aware Self-Attention Network | GC_ARM, [gc_arm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gc_arm.py) | [B Yang, et al. Context-Aware Self-Attention Networks, 2019](https://arxiv.org/abs/1902.05766) |
+| AFN | AFN/AFN+, [afn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afn.py) | [W Cheng, et al. Adaptive Factorization Network: Learning Adaptive-Order Feature Interactions, 2020.](https://arxiv.org/abs/1909.03276) |
+| ARM-Net | ARM-Net/ARM-Net+, [armnet.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/armnet.py) | [S Cai, et al. ARM-Net: Adaptive Relation Modeling Network for Structured Data, 2021.](https://dl.acm.org/doi/10.1145/3448016.3457321) |
 
 
 ### Citation
