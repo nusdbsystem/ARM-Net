@@ -8,7 +8,7 @@
 This repository contains our PyTorch implementation of [ARM-Net: Adaptive Relation Modeling Network for Structured Data](https://dl.acm.org/doi/10.1145/3448016.3457321).
 We also provide the implementation of relevant baseline models for structured (tabular) data learning.
 
-Our lightweight framework for structured data analytics implemented in [Singa](https://singa.incubator.apache.org/) can be found in our project [site](https://www.comp.nus.edu.sg/~dbsystem/armnet/).
+Our lightweight framework for structured data analytics implemented in [Singa](https://singa.incubator.apache.org/) can be found on our project [site](https://www.comp.nus.edu.sg/~dbsystem/armnet/).
 
 <img src="https://user-images.githubusercontent.com/14588544/123823881-2659a980-d930-11eb-918e-dc3bfa83ad97.png" width="820" />
 

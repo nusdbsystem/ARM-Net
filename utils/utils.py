@@ -9,8 +9,6 @@ import shutil
 
 # setup logger
 def logger(log_dir, need_time=True, need_stdout=False):
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
     log = logging.getLogger(__name__)
     log.setLevel(logging.DEBUG)
     fh = logging.FileHandler(log_dir)
@@ -98,7 +96,11 @@ def roc_auc_compute_fn(y_preds, y_targets):
 
     y_true = y_targets.numpy()
     y_pred = y_preds.numpy()
-    return roc_auc_score(y_true, y_pred)
+    try:
+        return roc_auc_score(y_true, y_pred)
+    except ValueError:
+        print('ValueError: Only one class present in y_true. ROC AUC score is not defined in that case.')
+        return 0.
 
 
 def load_checkpoint(args):

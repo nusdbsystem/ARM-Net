@@ -151,7 +151,7 @@ start_time, best_auc, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
-    if not os.path.isdir(f'log/{args.exp_name}'): os.mkdir(f'log/{args.exp_name}')
+    if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
     writer = SummaryWriter(f'{os.path.expanduser(args.tensorboard_dir)}{args.exp_name}/')
     main()
     start_time, best_auc = time.time(), 0.
