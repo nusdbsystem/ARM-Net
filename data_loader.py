@@ -108,7 +108,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
     :param valid_perc:      valid percentage split from train (default 0, whole train set)
     :param libsvm:          Libsvm loader of format {'ids', 'vals', 'y'}
     :param workers:         the number of subprocesses to load data
-    :return:                DataLoader
+    :return:                train/valid/test loader, train_loader.nclass
     '''
 
     def uci_validation_set(X, y, split_perc=0.2):
@@ -160,9 +160,10 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         assert data[1].types() == ['numeric'] * (len(data[1].types()) - 1) + ['nominal']
         X = np.array(data[0][data[1].names()[:-1]].tolist())
         y = np.array([int(e) for e in data[0][data[1].names()[-1]]])
-        return X.astype(np.float32), y
+        nclass = len(data[1]['clase'][1])
+        return X.astype(np.float32), y, nclass
 
-    Xtrain, ytrain = load_uci_dataset(data_dir)
+    Xtrain, ytrain, nclass = load_uci_dataset(data_dir)
     if valid_perc > 0:
         Xtrain, Xvalid, ytrain, yvalid = uci_validation_set(Xtrain, ytrain, split_perc=valid_perc)
         train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size)
@@ -172,7 +173,8 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         valid_loader = train_loader
 
     print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
-    Xtest, ytest = load_uci_dataset(data_dir, False)
+    Xtest, ytest, _ = load_uci_dataset(data_dir, False)
     test_loader, _ = make_loader(Xtest, ytest, batch_size=batch_size)
     print(f'{uci_folder_to_name(data_dir)}: {len(ytest)} testing samples loaded.')
+    train_loader.nclass = nclass
     return train_loader, valid_loader, test_loader
