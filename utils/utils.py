@@ -96,27 +96,8 @@ def roc_auc_compute_fn(y_preds, y_targets):
 
     y_true = y_targets.numpy()
     y_pred = y_preds.numpy()
-    try:
-        return roc_auc_score(y_true, y_pred)
-    except ValueError:
-        print('ValueError: Only one class present in y_true. ROC AUC score is not defined in that case.')
-        return 0.
+    return roc_auc_score(y_true, y_pred)
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / batch_size).item())
-
-    return res
 
 def load_checkpoint(args):
     try:

@@ -4,47 +4,54 @@ from utils.entmax import EntmaxBisect
 from models.layers import Embedding, MLP
 
 class SparseAttLayer(nn.Module):
-    def __init__(self, nhead, nfield, nemb, nhid, alpha=1.5):
-        """ Multi-Head Sparse Attention Layer"""
+    def __init__(self, nfield, nemb, nhid, alpha=1.5):
+        """ Sparse Attention Layer w/o bilinear weight"""
         super(SparseAttLayer, self).__init__()
         if alpha == 1.:
             self.sparsemax = nn.Softmax(dim=-1)
         else:
             self.sparsemax = EntmaxBisect(alpha, dim=-1)
 
-        self.Q = nn.Parameter(torch.zeros(nhead, nhid, nemb))           # K*O*E
+        self.Q = nn.Parameter(torch.zeros(nhid, nemb))              # O*E
         nn.init.xavier_uniform_(self.Q, gain=1.414)
 
-        self.bilinear = nn.Parameter(torch.zeros(nhead, nemb, nemb))    # K*E*E
-        nn.init.xavier_uniform_(self.bilinear, gain=1.414)
-
-        self.values = nn.Parameter(torch.zeros(nhead, nhid, nfield))    # K*O*F
+        self.values = nn.Parameter(torch.zeros(nhid, nfield))       # O*F
         nn.init.xavier_uniform_(self.values, gain=1.414)
 
     def forward(self, x):
         """
-        :param x:   B*F*E
-        :return:    Att_weights (B*K*O*F), Key (B*F*E) <-> Q (K*O*E)
+        :param x:       B*F*E
+        :return:        Att_weights (B*O*F), Key (B*F*E) <-> Q (O*E) -> W (O*F)
         """
-        keys = x                                                        # B*F*E
+        keys = x                                                    # B*F*E
 
         # sparse gates
-        att_gates = torch.einsum('bfx,kxy,koy->bkof',
-                                 keys, self.bilinear, self.Q)           # B*K*O*F
-        sparse_gates = self.sparsemax(att_gates)                        # B*K*O*F
+        att_gates = torch.einsum('bfe,oe->bof', keys, self.Q)       # B*O*F
+        sparse_gates = self.sparsemax(att_gates)                    # B*O*F
 
-        return torch.einsum('bkof,kof->bkof', sparse_gates, self.values)
+        return torch.einsum('bof,of->bof', sparse_gates, self.values)
+
+ARM_CONFIG = {
+    'lr': [0.003, 0.01, 0.03, 0.1],
+    'nemb': [1, 4, 8, 16],
+    'alpha': [1.0, 1.3, 1.5, 1.7],
+    'arm_hid': [20, 50, 100, 200],
+    'mlp_layer': [1, 2, 3],
+    'mlp_hid': [50, 100, 200],
+    'dropout': [0.0, 0.05],
+    'ensemble': [True, False],
+}
 
 class ARMNetModel(nn.Module):
     """
-    Model:  Adaptive Relation Modeling Network (Multi-Head)
+    Model:  Adaptive Relation Modeling Network (w/o bilinear weight => One-Head)
     """
 
-    def __init__(self, nfield, nfeat, nemb, nhead, alpha, arm_hid, mlp_layers, mlp_hid,
+    def __init__(self, nclass, nfield, nfeat, nemb, alpha, arm_hid, mlp_layers, mlp_hid,
                  dropout, ensemble, deep_layers, deep_hid):
         super().__init__()
-        self.nfield, self.nfeat, self.nemb = nfield, nfeat, nemb
-        self.arm_head, self.arm_hid = nhead, arm_hid
+        self.nfield, self.nfeat = nfield, nfeat
+        self.nemb, self.arm_hid = nemb, arm_hid
         self.ensemble = ensemble
 
         # embedding
@@ -52,42 +59,44 @@ class ARMNetModel(nn.Module):
         self.emb_bn = nn.BatchNorm1d(nfield)
 
         # arm
-        self.attn_layer = SparseAttLayer(nhead, nfield, nemb, arm_hid, alpha)
-        self.arm_bn = nn.BatchNorm1d(nhead*arm_hid)
+        self.attn_layer = SparseAttLayer(nfield, nemb, self.arm_hid, alpha)
+        self.arm_bn = nn.BatchNorm1d(self.arm_hid)
 
         # MLP
-        self.mlp = MLP(nhead*arm_hid*nemb, mlp_layers, mlp_hid, dropout)
+        self.mlp = MLP(self.arm_hid*nemb, mlp_layers, mlp_hid, dropout, noutput=nclass)
 
         if ensemble:
             self.deep_embedding = Embedding(nfeat, nemb)
-            self.deep_mlp = MLP(nfield*nemb, deep_layers, deep_hid, dropout)
+            self.deep_mlp = MLP(nfield*nemb, deep_layers, deep_hid, dropout, noutput=nclass)
             self.ensemble_layer = nn.Linear(2, 1)
             nn.init.constant_(self.ensemble_layer.weight, 0.5)
             nn.init.constant_(self.ensemble_layer.bias, 0.)
 
+        self.cls = nn.LogSoftmax(dim=1)
+
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   FloatTensor B*F
         :return:    y of size B, Regression and Classification (+sigmoid)
         """
-        x['vals'].clamp_(0.001, 1.)
         x_emb = self.embedding(x)                                       # B*F*E
 
-        arm_weights = self.attn_layer(x_emb)                            # B*K*O*F
+        arm_weights = self.attn_layer(x_emb)                            # B*O*F
 
-        arm = torch.einsum('bfe,bkof->bkoe', x_emb, arm_weights)        # B*K*O*E
-        arm = torch.exp(arm)                                            # B*K*O*E
-        arm = arm.view(arm.size(0), -1, self.nemb)                      # B*(KxO)*E
-        arm = self.arm_bn(arm).view(arm.size(0), -1)                    # B*(KxOxE)
+        arm = torch.einsum('bfe,bof->boe', x_emb, arm_weights)          # B*O*E
+        arm = torch.exp(arm)                                            # B*O*E
+        arm = arm.view(-1, self.arm_hid, self.nemb)                     # B*O*E
+        arm = self.arm_bn(arm).view(arm.size(0), -1)                    # B*(OxE)
 
-        y = self.mlp(arm)                                               # B*1
+        y = self.mlp(arm)                                               # B*nclass
 
         if self.ensemble:
             deep_emb = self.deep_embedding(x)
             y_deep = self.deep_mlp(
-                deep_emb.view(-1, self.nfield*self.nemb))               # B*1
+                deep_emb.view(-1, self.nfield*self.nemb))               # B*nclass
 
-            y = torch.cat([y, y_deep], dim=1)                           # B*2
-            y = self.ensemble_layer(y)                                  # B*1
+            y = torch.stack([y, y_deep], dim=2)                         # B*nclass*2
+            y = self.ensemble_layer(y).squeeze(2)                       # B*nclass
 
-        return y.squeeze(1)                                             # B
+        return self.cls(y)                                              # B*nclass
+

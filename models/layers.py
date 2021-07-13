@@ -3,22 +3,21 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.entmax import EntmaxBisect
 
 class Embedding(nn.Module):
+    ''' simplified version for ALL numerial features '''
 
     def __init__(self, nfeat, nemb):
         super().__init__()
-        self.embedding = nn.Embedding(nfeat, nemb)
-        nn.init.xavier_uniform_(self.embedding.weight)
+        self.embedding = nn.Parameter(torch.zeros(nfeat, nemb)) # F*E
+        nn.init.xavier_uniform_(self.embedding)
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   FloatTensor B*F
         :return:    embeddings B*F*E
         """
-        emb = self.embedding(x['ids'])                          # B*F*E
-        return emb * x['vals'].unsqueeze(2)                     # B*F*E
+        return torch.einsum('bf,fe->bfe', x, self.embedding)    # B*F*E
 
 class Linear(nn.Module):
 
