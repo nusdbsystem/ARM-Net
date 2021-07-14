@@ -1,13 +1,18 @@
 import torch
-from models.ffn import FFN, FFN_CONFIGS
+from models.snn import SNN, SNN_CONFIGS
 from models.armnet import ARMNetModel, ARM_CONFIG
+from models.afn import AFNModel,AFN_CONFIG
 
 def create_model(params, logger=None):
     if logger is None: logger = print
     logger(f'=> creating model {params}')
 
-    if params['model'] == 'ffn':
-        model = FFN(params['nfeat'], params['nclass'], params)
+    if params['model'] == 'snn':
+        model = SNN(params['nfeat'], params['nclass'], params)
+    elif params['model'] == 'afn':
+        model = AFNModel(params['nclass'], params['nfeat'], params['nfeat'], params['nemb'],
+                         params['afn_hid'], params['mlp_layer'], params['mlp_hid'],
+                         params['dropout'], params['ensemble'], params['mlp_layer'], params['mlp_hid'])
     elif params['model'] == 'armnet':
         model = ARMNetModel(params['nclass'], params['nfeat'], params['nfeat'], params['nemb'],
                     params['alpha'], params['arm_hid'], params['mlp_layer'], params['mlp_hid'],
@@ -20,9 +25,11 @@ def create_model(params, logger=None):
     return model
 
 def get_hyperparams(model):
-    if model == 'ffn':
-        return FFN_CONFIGS
+    if model == 'snn':
+        return SNN_CONFIGS
     elif model == 'armnet':
         return ARM_CONFIG
+    elif model == 'afn':
+        return AFN_CONFIG
     else:
         raise ValueError(f'unknown model type {model}')

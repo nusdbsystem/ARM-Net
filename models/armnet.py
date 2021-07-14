@@ -72,8 +72,6 @@ class ARMNetModel(nn.Module):
             nn.init.constant_(self.ensemble_layer.weight, 0.5)
             nn.init.constant_(self.ensemble_layer.bias, 0.)
 
-        self.cls = nn.LogSoftmax(dim=1)
-
     def forward(self, x):
         """
         :param x:   FloatTensor B*F
@@ -98,5 +96,4 @@ class ARMNetModel(nn.Module):
             y = torch.stack([y, y_deep], dim=2)                         # B*nclass*2
             y = self.ensemble_layer(y).squeeze(2)                       # B*nclass
 
-        return self.cls(y)                                              # B*nclass
-
+        return y                                                        # B*nclass

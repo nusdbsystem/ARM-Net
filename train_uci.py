@@ -12,6 +12,9 @@ import argparse
 from utils.uci_utils import *
 from data_loader import uci_loader
 
+torch.manual_seed(2021)
+np.random.seed(2021)
+
 def get_args():
     parser = argparse.ArgumentParser(description='Dropout Training')
     parser.add_argument('--exp_name', default='test', type=str, help='exp name used to store log and checkpoint')
@@ -26,7 +29,6 @@ def get_args():
     return args
 
 args = get_args()
-np.random.seed(2021)
 log_path = f'log/{args.exp_name}/stdout.log'
 if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
 plogger = logger(log_path, True, True).info
@@ -69,7 +71,7 @@ def fit(params, train_loader, val_loader, test_loader, epochs=100, metric='acc')
     plogger(f'start training params {params} ...')
     for test_idx in range(n_test):
         model = cuda(create_model(params, plogger))
-        criterion = cuda(nn.NLLLoss())
+        criterion = cuda(nn.CrossEntropyLoss())
         optimizer = optim.SGD(model.parameters(), lr=params['lr'], weight_decay=params.get('l2', 0.0))
 
         for epoch in range(epochs):

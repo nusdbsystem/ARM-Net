@@ -1,7 +1,7 @@
 import math
 import torch.nn as nn
 
-FFN_CONFIGS = {
+SNN_CONFIGS = {
     'lr': [0.01, 0.1, 1.0],
     'unit': [512, 256, 128],
     'layer': [2, 4, 8, 16],
@@ -35,9 +35,9 @@ class Layer(nn.Module):
     def forward(self, x):
         return self.activation(self.linear(self.dropout(x)))
 
-class FFN(nn.Module):
-    def __init__(self, in_features, n_classes, config, softmax=True):
-        super(FFN, self).__init__()
+class SNN(nn.Module):
+    def __init__(self, in_features, n_classes, config):
+        super(SNN, self).__init__()
         self.in_features = in_features
         self.config = config
         self.layers = nn.ModuleList([Layer(in_features, config['unit'],
@@ -47,7 +47,6 @@ class FFN(nn.Module):
             self.layers.append(Layer(config['unit'], config['unit'],
                     config['activation'], config['dropout']))       # NOTE: config['dropout']
         self.layers.append(nn.Linear(config['unit'], n_classes))
-        if softmax: self.layers.append(nn.LogSoftmax(dim=1))
 
     def forward(self, x):
         x = x.view(-1, self.in_features)

@@ -28,10 +28,10 @@ class Linear(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   FloatTensor B*F
         :return:    linear transform of x
         """
-        linear = self.weight(x['ids']).squeeze(2) * x['vals']   # B*F
+        linear = self.weight(x).squeeze(2)                      # B*F
         return torch.sum(linear, dim=1) + self.bias             # B
 
 class FactorizationMachine(nn.Module):
