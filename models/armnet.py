@@ -32,7 +32,7 @@ class SparseAttLayer(nn.Module):
         return torch.einsum('bof,of->bof', sparse_gates, self.values)
 
 ARM_CONFIG = {
-    'lr': [0.003, 0.01, 0.03, 0.1],
+    'lr': [0.01, 0.03, 0.1],
     'nemb': [1, 4, 8, 16],
     'alpha': [1.0, 1.3, 1.5, 1.7],
     'arm_hid': [20, 50, 100, 200],

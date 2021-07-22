@@ -77,6 +77,7 @@ def fit(params, train_loader, val_loader, test_loader, epochs=100, metric='acc')
         for epoch in range(epochs):
             model.train()
             for batch, labels in train_loader:
+                if batch.size(0) == 1: continue     # armnet bn batch_size>1
                 batch = cuda(autograd.Variable(batch))
                 labels = cuda(autograd.Variable(labels))
                 optimizer.zero_grad()
@@ -103,7 +104,7 @@ def get_performance(path, params, batch_size=args.batch_size, metric='acc'):
 
     all_combinations = []
     all_params = list(sklearn.model_selection.ParameterGrid(params))
-    random.shuffle(all_params)
+    # random.shuffle(all_params)
     for params in all_params:
         comb_list = fit(params, train_loader_small, val_loader, None,
                         metric=metric, epochs=args.epoch)[0]

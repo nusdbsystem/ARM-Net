@@ -49,7 +49,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         return sklearn.model_selection.train_test_split(
             X, y, test_size=split_perc, random_state=0)
 
-    def make_loader(X, y, transformer=None, batch_size=64):
+    def make_loader(X, y, transformer=None, batch_size=64, drop_last=False):
         if transformer is None:
             transformer = sklearn.preprocessing.StandardScaler()
             transformer.fit(X)
@@ -58,14 +58,16 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
             return DataLoader(UCILibsvmDataset(X, y),
                               batch_size=batch_size,
                               shuffle=transformer is None,
-                              num_workers=workers, pin_memory=True
+                              num_workers=workers, pin_memory=True,
+                              drop_last=drop_last
                               ), transformer
         else:
             return DataLoader(
                 dataset=TensorDataset(*[torch.from_numpy(e) for e in [X, y]]),
                 batch_size=batch_size,
                 shuffle=transformer is None,
-                num_workers=workers, pin_memory=True
+                num_workers=workers, pin_memory=True,
+                drop_last=drop_last
             ), transformer
 
     def uci_folder_to_name(f):
@@ -100,10 +102,10 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
     Xtrain, ytrain, nclass = load_uci_dataset(data_dir)
     if valid_perc > 0:
         Xtrain, Xvalid, ytrain, yvalid = uci_validation_set(Xtrain, ytrain, split_perc=valid_perc)
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size)
-        valid_loader, _ = make_loader(Xvalid, yvalid, batch_size=batch_size)
+        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
+        valid_loader, _ = make_loader(Xvalid, yvalid, batch_size=batch_size, drop_last=False)
     else:
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size)
+        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
         valid_loader = train_loader
 
     print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
