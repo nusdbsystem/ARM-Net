@@ -23,7 +23,7 @@ class Linear(nn.Module):
 
     def __init__(self, nfeat):
         super().__init__()
-        self.weight = nn.Embedding(nfeat, 1)
+        self.weight = Embedding(nfeat, 1)
         self.bias = nn.Parameter(torch.zeros((1,)))
 
     def forward(self, x):
