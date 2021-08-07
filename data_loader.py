@@ -35,7 +35,7 @@ class UCILibsvmDataset(Dataset):
                 'vals': self.feat_vals[idx],
                 'y': self.y[idx]}
 
-def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
+def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=2, verbose=True):
     '''
     :param data_dir:        Path to load the uci dataset
     :param batch_size:      Batch size
@@ -57,7 +57,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         if libsvm:
             return DataLoader(UCILibsvmDataset(X, y),
                               batch_size=batch_size,
-                              shuffle=transformer is None,
+                              shuffle=True,
                               num_workers=workers, pin_memory=True,
                               drop_last=drop_last
                               ), transformer
@@ -65,7 +65,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
             return DataLoader(
                 dataset=TensorDataset(*[torch.from_numpy(e) for e in [X, y]]),
                 batch_size=batch_size,
-                shuffle=transformer is None,
+                shuffle=True,
                 num_workers=workers, pin_memory=True,
                 drop_last=drop_last
             ), transformer
@@ -99,7 +99,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         nclass = len(data[1]['clase'][1])
         return X.astype(np.float32), y, nclass
 
-    Xtrain, ytrain, nclass = load_uci_dataset(data_dir)
+    Xtrain, ytrain, nclass = load_uci_dataset(data_dir, train=True)
     if valid_perc > 0:
         Xtrain, Xvalid, ytrain, yvalid = uci_validation_set(Xtrain, ytrain, split_perc=valid_perc)
         train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
@@ -108,9 +108,10 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
         train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
         valid_loader = train_loader
 
-    print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
-    Xtest, ytest, _ = load_uci_dataset(data_dir, False)
+    Xtest, ytest, _ = load_uci_dataset(data_dir, train=False)
     test_loader, _ = make_loader(Xtest, ytest, batch_size=batch_size)
-    print(f'{uci_folder_to_name(data_dir)}: {len(ytest)} testing samples loaded.')
+    if verbose:
+        print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
+        print(f'{uci_folder_to_name(data_dir)}: {len(ytest)} testing samples loaded.')
     train_loader.nclass, train_loader.nfeat = nclass, Xtrain.shape[-1]
     return train_loader, valid_loader, test_loader

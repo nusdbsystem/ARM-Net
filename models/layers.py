@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Embedding(nn.Module):
-    ''' simplified version for ALL numerial features '''
+    ''' simplified version for ALL numerical features '''
 
     def __init__(self, nfeat, nemb):
         super().__init__()

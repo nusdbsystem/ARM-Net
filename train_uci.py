@@ -16,8 +16,8 @@ torch.manual_seed(2021)
 np.random.seed(2021)
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Dropout Training')
-    parser.add_argument('--exp_name', default='test', type=str, help='exp name used to store log and checkpoint')
+    parser = argparse.ArgumentParser(description='UCI Training')
+    parser.add_argument('--exp_name', default='test', type=str, help='exp name used to store log & checkpoint')
     parser.add_argument('--model', default='ffn', type=str, help='model type')
     parser.add_argument('--data_dir', default='./data/uci', type=str, help='dataset dir path')
     parser.add_argument('--dataset', default='abalone', type=str, help='dataset name')
@@ -25,6 +25,7 @@ def get_args():
     parser.add_argument('--epoch', default=100, type=int, metavar='N', help='training epoch')
     parser.add_argument('--batch_size', default=64, type=int, metavar='N', help='mini-batch size')
     parser.add_argument('--hyper_val_cnt', default=5, type=int, metavar='N', help='test cnt per best hyperparam set')
+    parser.add_argument('--moving_avg_num', default=5, type=int, help='number of epochs for perf moving average')
     args = parser.parse_args()
     return args
 
@@ -96,7 +97,7 @@ def fit(params, train_loader, val_loader, test_loader, epochs=100, metric='acc')
 
     return all_combinations, all_test_accs
 
-def get_performance(path, params, batch_size=args.batch_size, metric='acc'):
+def get_performance(path, params, batch_size=args.batch_size, metric=args.metric):
     train_loader_small, val_loader, test_loader = uci_loader(path, batch_size, valid_perc=0.15)
     train_loader_big, _, _ = uci_loader(path, batch_size, valid_perc=0.)
     params['nclass'], params['nfeat'] = [train_loader_big.nclass], [train_loader_big.nfeat]
@@ -110,13 +111,14 @@ def get_performance(path, params, batch_size=args.batch_size, metric='acc'):
                         metric=metric, epochs=args.epoch)[0]
         # smooth learning curve; comb_list item format: (params, epoch+1, accuracy)
         new_comb_list = []
-        last_10 = [0.0] * 10
+        last_perfs = [0.0] * args.moving_avg_num
         for params, epochs, val_score in comb_list:
-            last_10.pop(0)
-            last_10.append(val_score)
-            new_comb_list.append((params, epochs, np.mean(last_10)))
+            last_perfs.pop(0)
+            last_perfs.append(val_score)
+            new_comb_list.append((params, epochs, np.mean(last_perfs)))
         all_combinations += new_comb_list
-        plogger(f'==>>params:\t{params}\tbest_acc:\t{max(new_comb_list, key=score_key)[2]:.4f}')
+        max_perf_tuple = max(new_comb_list, key=score_key)
+        plogger(f'==>>params:\t{params}\tbest_acc @{max_perf_tuple[1]}-th epoch:\t{max_perf_tuple[2]:.4f}')
 
     best_params, best_epochs, val_score = max(all_combinations, key=score_key)
     return (best_params, best_epochs, val_score,
