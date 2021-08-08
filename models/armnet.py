@@ -1,7 +1,9 @@
+from ray import tune
 import torch
 import torch.nn as nn
 from utils.entmax import EntmaxBisect
 from models.layers import Embedding, MLP
+
 
 class SparseAttLayer(nn.Module):
     def __init__(self, nfield, nemb, nhid, alpha=1.5):
@@ -31,16 +33,19 @@ class SparseAttLayer(nn.Module):
 
         return torch.einsum('bof,of->bof', sparse_gates, self.values)
 
+
 ARM_CONFIG = {
-    'lr': [0.01, 0.03, 0.1],
-    'nemb': [1, 4, 8, 16],
-    'alpha': [1.0, 1.3, 1.5, 1.7],
-    'arm_hid': [20, 50, 100, 200],
-    'mlp_layer': [1, 2, 3],
-    'mlp_hid': [50, 100, 200],
-    'dropout': [0.0, 0.05],
-    'ensemble': [True, False],
+    'batch_size': tune.choice([64, 128, 256]),
+    'lr': tune.qloguniform(1e-3, 1e-1, 1e-3),
+    'nemb': tune.lograndint(1, 32),
+    'alpha': tune.choice([1.0, 1.3, 1.5, 1.7, 2.0]),
+    'arm_hid': tune.lograndint(1, 1024),
+    'mlp_layer': tune.choice([1, 2, 4, 6, 8]),
+    'mlp_hid': tune.lograndint(1, 1024),
+    'dropout': tune.choice([0., 0.05, 0.1]),
+    'ensemble': tune.choice([True, False])
 }
+
 
 class ARMNetModel(nn.Module):
     """

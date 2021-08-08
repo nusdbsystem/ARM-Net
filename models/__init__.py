@@ -1,2 +1,2 @@
-from .model_utils import create_model, get_hyperparams
+from .model_utils import *
 from .snn import *

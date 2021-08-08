@@ -1,35 +1,41 @@
 import torch
+import torch.nn as nn
 from models.snn import SNN, SNN_CONFIGS
 from models.armnet import ARMNetModel, ARM_CONFIG
-from models.afn import AFNModel,AFN_CONFIG
 
-def create_model(params, logger=None):
+
+def create_model(config, logger=None):
     if logger is None: logger = print
-    logger(f'=> creating model {params}')
+    logger(f'=> creating model {config}')
 
-    if params['model'] == 'snn':
-        model = SNN(params['nfeat'], params['nclass'], params)
-    elif params['model'] == 'afn':
-        model = AFNModel(params['nclass'], params['nfeat'], params['nfeat'], params['nemb'],
-                         params['afn_hid'], params['mlp_layer'], params['mlp_hid'],
-                         params['dropout'], params['ensemble'], params['mlp_layer'], params['mlp_hid'])
-    elif params['model'] == 'armnet':
-        model = ARMNetModel(params['nclass'], params['nfeat'], params['nfeat'], params['nemb'],
-                    params['alpha'], params['arm_hid'], params['mlp_layer'], params['mlp_hid'],
-                    params['dropout'], params['ensemble'], params['mlp_layer'], params['mlp_hid'])
+    if config['model'] == 'snn':
+        model = SNN(config['nfeat'], config['nclass'], config)
+    elif config['model'] == 'armnet':
+        model = ARMNetModel(config['nclass'], config['nfeat'], config['nfeat'], config['nemb'],
+                            config['alpha'], config['arm_hid'], config['mlp_layer'], config['mlp_hid'],
+                            config['dropout'], config['ensemble'], config['mlp_layer'], config['mlp_hid'])
     else:
-        raise ValueError(f'unknown model type {params["model"]}')
+        raise ValueError(f'unknown model type {config["model"]}')
 
     if torch.cuda.is_available(): model = model.cuda()
     logger(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
     return model
 
-def get_hyperparams(model):
+
+def get_config(model):
     if model == 'snn':
         return SNN_CONFIGS
     elif model == 'armnet':
         return ARM_CONFIG
-    elif model == 'afn':
-        return AFN_CONFIG
     else:
         raise ValueError(f'unknown model type {model}')
+
+
+def to_device(model):
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+    model.to(device)
+    return device
