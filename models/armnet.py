@@ -35,15 +35,19 @@ class SparseAttLayer(nn.Module):
 
 
 ARM_CONFIG = {
-    'batch_size': tune.choice([64, 128, 256]),
-    'lr': tune.qloguniform(1e-3, 1e-1, 1e-3),
-    'nemb': tune.lograndint(1, 32),
-    'alpha': tune.choice([1.0, 1.3, 1.5, 1.7, 2.0]),
-    'arm_hid': tune.lograndint(1, 1024),
-    'mlp_layer': tune.choice([1, 2, 4, 6, 8]),
-    'mlp_hid': tune.lograndint(1, 1024),
-    'dropout': tune.choice([0., 0.05, 0.1]),
-    'ensemble': tune.choice([True, False])
+    # training config
+    'batch_size': 64,
+    'lr': tune.grid_search([1e-3, 3e-3, 1e-2, 3e-2]),
+    # model config - random
+    'dropout': 0.0,
+    'mlp_layer': 2,
+    'mlp_hid': 128,
+    # model config - grid search
+    'nemb': tune.grid_search([1, 2, 4, 8, 16, 32]),
+    'alpha': tune.grid_search([1.0, 1.3, 1.5, 1.7, 2.0]),
+    'arm_hid': tune.grid_search([8, 16, 32, 64, 128, 256]),
+    'ensemble': True
+    # 'ensemble': tune.grid_search([True, False])
 }
 
 

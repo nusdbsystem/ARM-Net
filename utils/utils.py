@@ -5,6 +5,7 @@ import math
 import logging
 import sys
 import shutil
+import numpy as np
 
 
 # setup logger
@@ -25,12 +26,14 @@ def logger(log_dir, need_time=True, need_stdout=False):
     log.addHandler(fh)
     return log
 
+
 # detach and del logger
 def remove_logger(logger):
     for handler in logger.handlers[:]:
         handler.close()
         logger.removeHandler(handler)
     del logger
+
 
 def timeSince(since=None, s=None):
     if s is None:
@@ -59,6 +62,29 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+class PlateauStopper(object):
+    """Stop when training Plateau (last few epochs stop improving)"""
+
+    def __init__(self, patience=0, avg_num=5, mode='max', start_val=0.):
+        self.patience, self.patience_cnt = patience, 0
+        self.last_vals = [start_val] * avg_num
+        # min -> max negative values
+        self.mode_flag = 1 if mode == 'max' else -1
+
+    def stop(self, val):
+        last_avg = np.mean(self.last_vals)
+        self.last_vals.pop(0)
+        self.last_vals.append(val*self.mode_flag)
+        cur_avg = np.mean(self.last_vals)
+        if cur_avg > last_avg:
+            self.patience_cnt = 0
+        else:
+            self.patience_cnt += 1
+            if self.patience_cnt > self.patience:
+                return True
+        return False
 
 
 def accuracy(output, target, topk=(1,)):

@@ -1,12 +1,16 @@
+from ray import tune
 import math
 import torch.nn as nn
 
 SNN_CONFIGS = {
-    'lr': [0.01, 0.1, 1.0],
-    'unit': [512, 256, 128],
-    'layer': [2, 4, 8, 16],
-    'dropout': [0.0, 0.01, 0.05, 0.1],
-    'activation': ['selu', 'relu']
+    # training
+    'batch_size': 64,
+    'lr': tune.grid_search([1e-3, 3e-3, 1e-2, 3e-2]),
+    # model
+    'unit': tune.grid_search([256, 512, 1024]),
+    'layer': tune.grid_search([2, 3, 4, 8, 16, 32]),
+    'dropout': tune.grid_search([0.0, 0.5]),
+    'activation': 'selu',
 }
 
 ACTIVATIONS = {
@@ -23,6 +27,7 @@ def init_tensor(tensor, nonlinearity, mode='fan_in'):
     std = gain / math.sqrt(fan)
     return tensor.data.normal_(0, std)
 
+
 class Layer(nn.Module):
     def __init__(self, in_features, out_features, activation='relu', dropout=0.):
         super(Layer, self).__init__()
@@ -34,6 +39,7 @@ class Layer(nn.Module):
 
     def forward(self, x):
         return self.activation(self.linear(self.dropout(x)))
+
 
 class SNN(nn.Module):
     def __init__(self, in_features, n_classes, config):

@@ -4,9 +4,9 @@ from models.snn import SNN, SNN_CONFIGS
 from models.armnet import ARMNetModel, ARM_CONFIG
 
 
-def create_model(config, logger=None):
+def create_model(config, logger=None, verbose=False):
     if logger is None: logger = print
-    logger(f'=> creating model {config}')
+    if verbose: logger(f'=> creating model {config}')
 
     if config['model'] == 'snn':
         model = SNN(config['nfeat'], config['nclass'], config)
@@ -18,7 +18,7 @@ def create_model(config, logger=None):
         raise ValueError(f'unknown model type {config["model"]}')
 
     if torch.cuda.is_available(): model = model.cuda()
-    logger(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
+    if verbose: logger(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
     return model
 
 
