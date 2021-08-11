@@ -90,7 +90,7 @@ def train_one_epoch(model, train_loader, optimizer, device):
         optimizer.step()
 
 # for both ray.tune and final training/evaluation (based on )
-def train_uci(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epochs=args.max_epochs):
+def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epochs=args.max_epochs):
     # loading dataset
     train_loader, val_loader, test_loader = uci_loader(data_dir, config["batch_size"],
                                                        valid_perc=0. if final_run else args.valid_perc)
@@ -110,7 +110,7 @@ def train_uci(config, checkpoint_dir=None, data_dir=None, final_run=False, max_e
         optimizer.load_state_dict(checkpoint["optimizer"])
 
     # stopper: params - patience & avg_num
-    stopper = PlateauStopper(patience=0, avg_num=10)
+    stopper = PlateauStopper(patience=0, avg_num=1)
     for epoch in range(start_epoch, max_epochs):
         # train one epoch
         train_one_epoch(model, train_loader, optimizer, device)
@@ -138,7 +138,7 @@ def main(num_samples, gpus_per_trial):
     reporter = CLIReporter(metric_columns=["loss", "acc", "training_iteration"])
     # using default stop/search_alg/scheduler
     analysis = tune.run(
-        partial(train_uci, data_dir=data_dir),
+        partial(worker, data_dir=data_dir),
         name=args.exp_name,
         config=config,
         resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
@@ -155,18 +155,18 @@ def main(num_samples, gpus_per_trial):
     # store the stats of all the evaluated hyper-params to csv
     analysis.dataframe(metric="acc", mode="max").to_csv(f'{log_dir}results.csv')
     # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
-    best_trial = analysis.get_best_trial("acc", "max", "last-10-avg")
+    best_trial = analysis.get_best_trial("acc", "max", "all")
     plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config} \n'
             f'Best trial validation loss: {best_trial.last_result["loss"]}'
             f'accuracy: {best_trial.last_result["acc"]}')
     # final run using the best hyperparams
     final_acc, final_loss = [], []
     for idx in range(args.final_eval_num):
-        test_acc, test_loss = train_uci(best_trial.config, data_dir=data_dir,
-                                        final_run=True, max_epochs=best_trial.last_result['training_iteration'])
+        test_acc, test_loss = worker(best_trial.config, data_dir=data_dir,
+                                     final_run=True, max_epochs=best_trial.last_result['training_iteration'])
         final_acc.append(test_acc); final_loss.append(test_loss)
         plogger(f'Final test-{idx}: acc {test_acc} loss {test_loss}')
-    plogger(f'Best trial final loss: {np.mean(final_loss):.4f}/{np.std(final_loss):.4f}'
+    plogger(f'Best trial final loss: {np.mean(final_loss):.4f}/{np.std(final_loss):.4f}\t'
             f'accuracy: {np.mean(final_acc):.4f}/{np.std(final_acc):.4f}')
 
 
