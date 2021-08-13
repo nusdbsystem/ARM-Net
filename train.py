@@ -78,16 +78,19 @@ def evaluate(model, val_loader, metric='acc'):
 def train_one_epoch(model, train_loader, optimizer, device):
     model.train()
     for i, data in enumerate(train_loader, 0):
-        # get the inputs; data is a list of [inputs, labels]
-        inputs, labels = data
-        inputs, labels = inputs.to(device), labels.to(device)
-        # zero the parameter gradients
-        optimizer.zero_grad()
-        # forward + backward + optimize
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+        try:
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+            # zero the parameter gradients
+            optimizer.zero_grad()
+            # forward + backward + optimize
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+        except Exception as e:
+            plogger(f'input size: {input.size()} error msg: {str(e)}')
 
 # for both ray.tune and final training/evaluation (based on )
 def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epochs=args.max_epochs):
@@ -110,7 +113,7 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
         optimizer.load_state_dict(checkpoint["optimizer"])
 
     # stopper: params - patience & avg_num
-    stopper = PlateauStopper(patience=0, avg_num=1)
+    stopper = PlateauStopper(patience=0, avg_num=10)
     for epoch in range(start_epoch, max_epochs):
         # train one epoch
         train_one_epoch(model, train_loader, optimizer, device)
@@ -155,9 +158,9 @@ def main(num_samples, gpus_per_trial):
     # store the stats of all the evaluated hyper-params to csv
     analysis.dataframe(metric="acc", mode="max").to_csv(f'{log_dir}results.csv')
     # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
-    best_trial = analysis.get_best_trial("acc", "max", "all")
-    plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config} \n'
-            f'Best trial validation loss: {best_trial.last_result["loss"]}'
+    best_trial = analysis.get_best_trial("acc", "max", "last-10-avg")
+    plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\n'
+            f'Best trial validation loss: {best_trial.last_result["loss"]}\t'
             f'accuracy: {best_trial.last_result["acc"]}')
     # final run using the best hyperparams
     final_acc, final_loss = [], []

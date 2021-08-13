@@ -45,7 +45,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=2, ver
     :return:                train/valid/test loader, train_loader.nclass/nclass
     '''
 
-    def uci_validation_set(X, y, split_perc=0.2):
+    def uci_validation_set(X, y, split_perc):
         return sklearn.model_selection.train_test_split(
             X, y, test_size=split_perc, random_state=0)
 
@@ -66,7 +66,8 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=2, ver
                 dataset=TensorDataset(*[torch.from_numpy(e) for e in [X, y]]),
                 batch_size=batch_size,
                 shuffle=True,
-                num_workers=workers, pin_memory=True,
+                num_workers=workers,
+                pin_memory=True,
                 drop_last=drop_last
             ), transformer
 
@@ -102,14 +103,14 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=2, ver
     Xtrain, ytrain, nclass = load_uci_dataset(data_dir, train=True)
     if valid_perc > 0:
         Xtrain, Xvalid, ytrain, yvalid = uci_validation_set(Xtrain, ytrain, split_perc=valid_perc)
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
-        valid_loader, _ = make_loader(Xvalid, yvalid, batch_size=batch_size, drop_last=False)
+        train_loader, transformer = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
+        valid_loader, _ = make_loader(Xvalid, yvalid, transformer, batch_size=batch_size, drop_last=False)
     else:
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
+        train_loader, transformer = make_loader(Xtrain, ytrain, batch_size=batch_size, drop_last=False)
         valid_loader = train_loader
 
     Xtest, ytest, _ = load_uci_dataset(data_dir, train=False)
-    test_loader, _ = make_loader(Xtest, ytest, batch_size=batch_size)
+    test_loader, _ = make_loader(Xtest, ytest, transformer, batch_size=batch_size)
     if verbose:
         print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
         print(f'{uci_folder_to_name(data_dir)}: {len(ytest)} testing samples loaded.')
