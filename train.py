@@ -1,6 +1,7 @@
 import os
 import argparse
 from functools import partial
+import multiprocessing
 
 import torch.nn as nn
 import torch.optim as optim
@@ -28,7 +29,7 @@ def get_args():
     parser.add_argument('--data_dir', default='/home/shaofeng/ARM-Net/data/uci', type=str, help='dataset dir path')
     parser.add_argument('--dataset', default='abalone', type=str, help='dataset name')
     parser.add_argument('--metric', default='acc', type=str, help='evaluation metric')
-    parser.add_argument('--valid_perc', default=0.2, type=float, help='validation percent split from trainset')
+    parser.add_argument('--valid_perc', default=0.15, type=float, help='validation percent split from trainset')
     parser.add_argument('--final_eval_num', default=5, type=int, help='# repeats to evaluate the best hyper-params')
     # ray auto-tune params
     parser.add_argument('--max_epochs', default=100, type=int, help='max training epoch')
@@ -90,7 +91,7 @@ def train_one_epoch(model, train_loader, optimizer, device):
             loss.backward()
             optimizer.step()
         except Exception as e:
-            plogger(f'input size: {input.size()} error msg: {str(e)}')
+            plogger(f'input size: {inputs.size()} error msg: {str(e)}')
 
 # for both ray.tune and final training/evaluation (based on )
 def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epochs=args.max_epochs):
@@ -139,14 +140,16 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
 def main(num_samples, gpus_per_trial):
     config = get_config(args.model)
     reporter = CLIReporter(metric_columns=["loss", "acc", "training_iteration"])
+    max_concurrent = torch.cuda.device_count() / gpus_per_trial
     # using default stop/search_alg/scheduler
     analysis = tune.run(
         partial(worker, data_dir=data_dir),
+        metric="acc", mode="max",
         name=args.exp_name,
         config=config,
-        resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
+        resources_per_trial={"cpu": multiprocessing.cpu_count()/max_concurrent, "gpu": gpus_per_trial},
         num_samples=num_samples,
-        search_alg=BasicVariantGenerator(max_concurrent=torch.cuda.device_count()/gpus_per_trial),
+        search_alg=BasicVariantGenerator(max_concurrent=max_concurrent),
         progress_reporter=reporter,
         local_dir=args.ray_dir,
         keep_checkpoints_num=args.checkpoint_num,
@@ -160,7 +163,7 @@ def main(num_samples, gpus_per_trial):
     # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
     best_trial = analysis.get_best_trial("acc", "max", "last-10-avg")
     plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\n'
-            f'Best trial validation loss: {best_trial.last_result["loss"]}\t'
+            f'Best trial last validation loss: {best_trial.last_result["loss"]}\t'
             f'accuracy: {best_trial.last_result["acc"]}')
     # final run using the best hyperparams
     final_acc, final_loss = [], []
@@ -168,7 +171,7 @@ def main(num_samples, gpus_per_trial):
         test_acc, test_loss = worker(best_trial.config, data_dir=data_dir,
                                      final_run=True, max_epochs=best_trial.last_result['training_iteration'])
         final_acc.append(test_acc); final_loss.append(test_loss)
-        plogger(f'Final test-{idx}: acc {test_acc} loss {test_loss}')
+        plogger(f'Eval-{idx}: acc {test_acc} loss {test_loss} @{best_trial.last_result["training_iteration"]}')
     plogger(f'Best trial final loss: {np.mean(final_loss):.4f}/{np.std(final_loss):.4f}\t'
             f'accuracy: {np.mean(final_acc):.4f}/{np.std(final_acc):.4f}')
 
