@@ -104,7 +104,7 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
     model = create_model(config, plogger)
     device = to_device(model)
     # optimizer (Adam vs. SGD)
-    optimizer = optim.SGD(model.parameters(), lr=config["lr"])
+    optimizer = optim.Adam(model.parameters(), lr=config["lr"])
     # checkpoint (for ray.tune scheduler/algorithm)
     start_epoch = 0
     if checkpoint_dir:
