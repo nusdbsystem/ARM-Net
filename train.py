@@ -3,6 +3,7 @@ import argparse
 from functools import partial
 import multiprocessing
 
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.autograd as autograd
@@ -12,7 +13,7 @@ from sklearn.metrics import roc_auc_score, f1_score
 
 from models import create_model, get_config, to_device
 from utils import logger, AverageMeter, PlateauStopper
-from utils.uci_utils import *
+from utils.uci_utils import cuda
 from data_loader import uci_loader
 
 from ray import tune
@@ -96,8 +97,7 @@ def train_one_epoch(model, train_loader, optimizer, device):
 # for both ray.tune and final training/evaluation (based on )
 def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epochs=args.max_epochs):
     # loading dataset
-    train_loader, val_loader, test_loader = uci_loader(data_dir, config["batch_size"],
-                                                       valid_perc=0. if final_run else args.valid_perc)
+    train_loader, val_loader, test_loader = uci_loader(data_dir, valid_perc=0. if final_run else args.valid_perc)
     # create model
     config['nclass'], config['nfeat'] = train_loader.nclass, train_loader.nfeat
     config['model'] = args.model
@@ -114,7 +114,7 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
         optimizer.load_state_dict(checkpoint["optimizer"])
 
     # stopper: params - patience & avg_num
-    stopper = PlateauStopper(patience=0, avg_num=10)
+    stopper = PlateauStopper(patience=0, avg_num=1)
     for epoch in range(start_epoch, max_epochs):
         # train one epoch
         train_one_epoch(model, train_loader, optimizer, device)
@@ -144,7 +144,6 @@ def main(num_samples, gpus_per_trial):
     # using default stop/search_alg/scheduler
     analysis = tune.run(
         partial(worker, data_dir=data_dir),
-        metric="acc", mode="max",
         name=args.exp_name,
         config=config,
         resources_per_trial={"cpu": multiprocessing.cpu_count()/max_concurrent, "gpu": gpus_per_trial},
@@ -161,7 +160,7 @@ def main(num_samples, gpus_per_trial):
     # store the stats of all the evaluated hyper-params to csv
     analysis.dataframe(metric="acc", mode="max").to_csv(f'{log_dir}results.csv')
     # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
-    best_trial = analysis.get_best_trial("acc", "max", "last-10-avg")
+    best_trial = analysis.get_best_trial("acc", "max", "all")
     plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\n'
             f'Best trial last validation loss: {best_trial.last_result["loss"]}\t'
             f'accuracy: {best_trial.last_result["acc"]}')

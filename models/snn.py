@@ -4,12 +4,11 @@ import torch.nn as nn
 
 SNN_CONFIGS = {
     # training
-    'batch_size': 64,
-    'lr': tune.grid_search([1e-3, 3e-3, 1e-2, 3e-2]),
+    'lr': tune.grid_search([1e-3, 3e-3, 1e-2]),
     # model
     'unit': tune.grid_search([256, 512, 1024]),
     'layer': tune.grid_search([2, 3, 4, 8, 16, 32]),
-    'dropout': tune.grid_search([0.0, 0.5]),
+    'dropout': tune.grid_search([0.0, 0.05]),
     'activation': 'selu',
 }
 
