@@ -3,6 +3,7 @@ import sys
 import argparse
 from functools import partial
 import multiprocessing
+from scipy import stats
 
 import torch
 import torch.nn as nn
@@ -31,14 +32,13 @@ def get_args():
     parser.add_argument('--metric', default='acc', type=str, help='evaluation metric')
     parser.add_argument('--valid_perc', default=0.15, type=float, help='validation percent split from trainset')
     parser.add_argument('--final_eval_num', default=5, type=int, help='# repeats to evaluate the best hyper-params')
-    parser.add_argument('--repeat', type=int, default=3, help='number of repeats with seeds [seed, seed+repeat)')
+    parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     parser.add_argument('--seed', type=int, default=2021, help='seed for reproducibility')
     # ray auto-tune params
     parser.add_argument('--max_epochs', default=100, type=int, help='max training epoch')
     parser.add_argument('--ray_dir', default='./ray_results', type=str, help='ray log dir')
     parser.add_argument('--gpus_per_trial', default=0.2, type=float, help='gpus per trial (default 5 trials per GPU)')
     parser.add_argument('--num_samples', default=1, type=int, help='# repeats to evaluate each hyperparams')
-    parser.add_argument('--checkpoint_num', default=0, type=int, help='# checkpoints for each hyperparam (default 0)')
     parser.add_argument("--resume", action="store_true", default=False, help="whether to resume ray tuning")
     args = parser.parse_args()
     return args
@@ -47,7 +47,7 @@ def get_args():
 args = get_args()
 log_dir = f'log/{args.exp_name}/'
 data_dir = f'{args.data_dir}/{args.dataset}'
-# logger
+# logger & stdout
 if not os.path.isdir(log_dir): os.makedirs(log_dir, exist_ok=True)
 plogger = logger(f'{log_dir}stdout.log', True, True).info
 plogger(vars(args))
@@ -110,11 +110,6 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
     # checkpoint (for ray.tune scheduler/algorithm)
     start_epoch = 0
-    if checkpoint_dir:
-        checkpoint = torch.load(os.path.join(checkpoint_dir, "checkpoint"))
-        start_epoch = checkpoint["epoch"] + 1
-        model.load_state_dict(checkpoint["model"])
-        optimizer.load_state_dict(checkpoint["optimizer"])
 
     # stopper: params - patience & avg_num
     stopper = PlateauStopper(patience=0, avg_num=10)
@@ -123,31 +118,25 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
         train_one_epoch(model, train_loader, optimizer, device)
         # ray.tune: validate
         if not final_run:
-            val_acc, val_loss = evaluate(model, val_loader, metric=args.metric)
-            # also evaluate on test_set for abalation study
-            test_acc, test_loss = evaluate(model, test_loader, metric=args.metric)
+            acc, loss = evaluate(model, val_loader, metric=args.metric)
             # early stop once not improving
-            if stopper.stop(val_acc): break
-            # store checkpoint
-            if args.checkpoint_num > 0:
-                with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
-                    torch.save({
-                        "epoch": epoch,
-                        "model": model.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                    }, os.path.join(checkpoint_dir, "checkpoint"))
+            if stopper.stop(acc): break
             # reporting metrics (for ray.tune)
-            tune.report(val_loss=val_loss, val_acc=val_acc, test_acc=test_acc)
-            print(f'epoch-{epoch} val_acc-{val_acc} test_acc-{test_acc} config: {config}')
+    # report validation accuracy (smoothed for hyper-param selection)
+    val_acc = stopper.last_avg
 
     # final_run: train the final model for the same number of epochs, return (acc, loss)
     if final_run: return evaluate(model, val_loader=test_loader)
+    else:
+        # train the model for the same number of epochs on the full train_set, and test on test_set
+        test_acc, test_loss = worker(config, data_dir=data_dir, final_run=True, max_epochs=epoch)
+        tune.report(val_acc=val_acc, test_acc=test_acc, epoch=epoch)
 
 def main(num_samples, gpus_per_trial):
     config = get_config(args.model)
-    reporter = CLIReporter(metric_columns=["val_loss", "val_acc", "test_acc", "training_iteration"])
+    reporter = CLIReporter(metric_columns=["loss", "val_acc", "test_acc", "training_iteration"])
     max_concurrent = torch.cuda.device_count() / gpus_per_trial
-    repeat_acc, repeat_loss = [], []
+    repeat_rho = []
     for seed in range(args.seed, args.seed+args.repeat):
         # set random seeds
         torch.manual_seed(seed)
@@ -162,31 +151,18 @@ def main(num_samples, gpus_per_trial):
             search_alg=BasicVariantGenerator(max_concurrent=max_concurrent),
             progress_reporter=reporter,
             local_dir=args.ray_dir,
-            keep_checkpoints_num=args.checkpoint_num,
-            checkpoint_score_attr="val_acc",
+            checkpoint_score_attr="acc",
             verbose=2,
             resume=args.resume,
             trial_name_creator=lambda trial: f'{trial.trial_id}'
         )
-        # store the stats of all the evaluated hyper-params to csv
-        analysis.dataframe(metric="val_acc", mode="max").to_csv(f'{log_dir}results_{seed}.csv')
-        # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
-        best_trial = analysis.get_best_trial("val_acc", "max", "last-10-avg")
-        plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\n'
-                f'Best trial last validation loss: {best_trial.last_result["val_loss"]}\t'
-                f'accuracy: {best_trial.last_result["val_acc"]}')
-        # final run using the best hyperparams
-        final_acc, final_loss = [], []
-        for idx in range(args.final_eval_num):
-            test_acc, test_loss = worker(best_trial.config, data_dir=data_dir,
-                                         final_run=True, max_epochs=best_trial.last_result['training_iteration'])
-            final_acc.append(test_acc); final_loss.append(test_loss)
-            plogger(f'Eval-{idx}: acc {test_acc} loss {test_loss} @{best_trial.last_result["training_iteration"]}')
-        plogger(f'Repeat-{seed}\tbest trial final loss: {np.mean(final_loss):.4f}/{np.std(final_loss):.4f}\t'
-                f'accuracy: {np.mean(final_acc):.4f}/{np.std(final_acc):.4f}')
-        repeat_acc.append(np.mean(final_acc)); repeat_loss.append(np.mean(final_loss))
-    plogger(f'Final report results: loss {np.mean(repeat_loss):.4f}/{np.std(repeat_loss):.4f}\t '
-            f'accuracy {np.mean(repeat_acc):.4f}/{np.std(repeat_acc):.4f}')
+        # get the trial stats in dataframe format
+        df = analysis.dataframe(metric="val_acc", mode="max")
+        rho, pval = stats.spearmanr(df.loc[:, 'val_acc'], df.loc[:, 'test_acc'])
+        plogger(f'Repeat-{seed}\tspearman correlation: {rho:.4f}({pval:.4f})')
+        repeat_rho.append(rho)
+    plogger(f'Final report results: rho {np.mean(repeat_rho):.4f}/{np.std(repeat_rho):.4f}')
+
 
 if __name__ == "__main__":
     main(num_samples=args.num_samples, gpus_per_trial=args.gpus_per_trial)

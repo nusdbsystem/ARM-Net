@@ -72,17 +72,18 @@ class PlateauStopper(object):
         self.last_vals, self.avg_num = [], avg_num
         # min -> max negative values
         self.mode_flag = 1 if mode == 'max' else -1
+        self.last_avg, self.cur_avg = None, None
 
     def stop(self, val):
         if len(self.last_vals) < self.avg_num:
             self.last_vals.append(val*self.mode_flag)
             return False
         else:
-            last_avg = np.mean(self.last_vals)
+            self.last_avg = np.mean(self.last_vals)
             self.last_vals.pop(0)
             self.last_vals.append(val*self.mode_flag)
-            cur_avg = np.mean(self.last_vals)
-            if cur_avg > last_avg:
+            self.cur_avg = np.mean(self.last_vals)
+            if self.cur_avg > self.last_avg:
                 self.patience_cnt = 0
             else:
                 self.patience_cnt += 1
