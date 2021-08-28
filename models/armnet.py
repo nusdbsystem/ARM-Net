@@ -82,7 +82,7 @@ class ARMNetModel(nn.Module):
     def forward(self, x):
         """
         :param x:   FloatTensor B*F
-        :return:    y of size B, Regression and Classification (+sigmoid)
+        :return:    y of size B, Regression and Classification (+softmax)
         """
         x_emb = self.embedding(x)                                       # B*F*E
 

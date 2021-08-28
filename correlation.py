@@ -112,29 +112,24 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
     start_epoch = 0
 
     # stopper: params - patience & avg_num
-    stopper = PlateauStopper(patience=0, avg_num=10)
+    stopper = PlateauStopper(patience=0, avg_num=1)
     for epoch in range(start_epoch, max_epochs):
         # train one epoch
         train_one_epoch(model, train_loader, optimizer, device)
         # ray.tune: validate
-        if not final_run:
-            acc, loss = evaluate(model, val_loader, metric=args.metric)
-            # early stop once not improving
-            if stopper.stop(acc): break
-            # reporting metrics (for ray.tune)
+        # if not final_run:
+        acc, loss = evaluate(model, val_loader, metric=args.metric)
+        # early stop once not improving
+        if stopper.stop(acc): break
+        # also evaluate on test_set for abalation study
+        test_acc, test_loss = evaluate(model, test_loader, metric=args.metric)
     # report validation accuracy (smoothed for hyper-param selection)
     val_acc = stopper.last_avg
-
-    # final_run: train the final model for the same number of epochs, return (acc, loss)
-    if final_run: return evaluate(model, val_loader=test_loader)
-    else:
-        # train the model for the same number of epochs on the full train_set, and test on test_set
-        test_acc, test_loss = worker(config, data_dir=data_dir, final_run=True, max_epochs=epoch)
-        tune.report(val_acc=val_acc, test_acc=test_acc, epoch=epoch)
+    tune.report(val_acc=val_acc, test_acc=test_acc, epoch=epoch)
 
 def main(num_samples, gpus_per_trial):
     config = get_config(args.model)
-    reporter = CLIReporter(metric_columns=["loss", "val_acc", "test_acc", "training_iteration"])
+    reporter = CLIReporter(metric_columns=["loss", "val_acc", "test_acc", "epoch"])
     max_concurrent = torch.cuda.device_count() / gpus_per_trial
     repeat_rho = []
     for seed in range(args.seed, args.seed+args.repeat):

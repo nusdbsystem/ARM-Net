@@ -41,6 +41,10 @@ class Layer(nn.Module):
 
 
 class SNN(nn.Module):
+    """
+    Model:  Self-Normalization Networks
+    Ref:    G Klambauer, et al. Self-Normalizing Neural Networks, 2017.
+    """
     def __init__(self, in_features, n_classes, config):
         super(SNN, self).__init__()
         self.in_features = in_features

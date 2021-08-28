@@ -117,7 +117,7 @@ def worker(config, checkpoint_dir=None, data_dir=None, final_run=False, max_epoc
         optimizer.load_state_dict(checkpoint["optimizer"])
 
     # stopper: params - patience & avg_num
-    stopper = PlateauStopper(patience=0, avg_num=10)
+    stopper = PlateauStopper(patience=0, avg_num=1)
     for epoch in range(start_epoch, max_epochs):
         # train one epoch
         train_one_epoch(model, train_loader, optimizer, device)
@@ -171,10 +171,10 @@ def main(num_samples, gpus_per_trial):
         # store the stats of all the evaluated hyper-params to csv
         analysis.dataframe(metric="val_acc", mode="max").to_csv(f'{log_dir}results_{seed}.csv')
         # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
-        best_trial = analysis.get_best_trial("val_acc", "max", "last-10-avg")
-        plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\n'
-                f'Best trial last validation loss: {best_trial.last_result["val_loss"]}\t'
-                f'accuracy: {best_trial.last_result["val_acc"]}')
+        best_trial = analysis.get_best_trial("val_acc", "max", "all")
+        plogger(f'Best trial id: {best_trial.trial_id} config: {best_trial.config}\t'
+                f'last val loss: {best_trial.last_result["val_loss"]}\t'
+                f'val acc: {best_trial.last_result["val_acc"]} test acc: {best_trial.last_result["test_acc"]}')
         # final run using the best hyperparams
         final_acc, final_loss = [], []
         for idx in range(args.final_eval_num):

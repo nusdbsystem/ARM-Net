@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from einops import rearrange, reduce
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -109,66 +110,43 @@ class SelfAttnLayer(nn.Module):
         attn_weights = F.softmax(scores / math.sqrt(d_k), dim=-1)       # B*F*F
         return torch.einsum('bxy,bye->bxe', attn_weights, value), attn_weights
 
-
-class scaled_dot_prodct_attention_(nn.Module):
-    ''' Scaled Dot-Product Attention '''
-
-    def __init__(self, temperature, attn_dropout=0.):
-        super().__init__()
-        self.temperature = temperature
-        self.dropout = nn.Dropout(attn_dropout)
-
-    def forward(self, q, k, v, mask=None):
-
-        attn = torch.matmul(q / self.temperature, k.transpose(2, 3))
-
-        if mask is not None:
-            attn = attn.masked_fill(mask == 0, -1e9)
-
-        attn = self.dropout(F.softmax(attn, dim=-1))
-        output = torch.matmul(attn, v)
-
-        return output, attn
-
 class MultiHeadAttention(nn.Module):
     '''Multi-head Attention Module'''
-    def __init__(self, nhead, ninput, n_k, n_v, dropout=0.):
-        super(MultiHeadAttention, self).__init__()
-        self.nhead, self.n_k, self.n_v = nhead, n_k, n_v
+    def __init__(self, nhead, ninput, d_k, d_v, dropout=0.0):
+        super().__init__()
+        self.nhead = nhead
 
-        self.Wq = nn.Linear(ninput, nhead*n_k, bias=False)
-        self.Wk = nn.Linear(ninput, nhead*n_k, bias=False)
-        self.Wv = nn.Linear(ninput, nhead*n_v, bias=False)
+        self.w_qs = nn.Linear(ninput, nhead * d_k)
+        self.w_ks = nn.Linear(ninput, nhead * d_k)
+        self.w_vs = nn.Linear(ninput, nhead * d_v)
 
-        self.attn_layer = scaled_dot_prodct_attention_(temperature=n_k**0.5)
+        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (ninput + d_k)))
+        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (ninput + d_k)))
+        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (ninput + d_v)))
 
+        self.fc = nn.Linear(nhead * d_v, ninput)
+        nn.init.xavier_normal_(self.fc.weight)
         self.dropout = nn.Dropout(p=dropout)
-        self.layer_norm = nn.LayerNorm(ninput, eps=1e-6)
+        self.layer_norm = nn.LayerNorm(ninput)
 
-        self.fc = nn.Linear(nhead*n_v, ninput, bias=False)
-
-    def forward(self, x, mask=None):
-        """
-        :param x:       B*F*E
-        :param mask:    B*F*F
-        :return:        B*F*E
-        """
-        bsz, seq_len = x.size(0), x.size(1)
-        residual = x
-
-        query = self.Wq(x).view(bsz, seq_len, self.nhead, self.n_k)     # B*F*H*Ek
-        key = self.Wk(x).view(bsz, seq_len, self.nhead, self.n_k)       # B*F*H*Ek
-        value = self.Wv(x).view(bsz, seq_len, self.nhead, self.n_v)     # B*F*H*Ev
-
-        q, k, v = query.transpose(1, 2), key.transpose(1, 2), value.transpose(1, 2)
-
+    def forward(self, q, k, v, mask=None):
+        '''
+        :param q:       B*F_l*E_k
+        :param k:       B*F_t*E_k
+        :param v:       B*F_t*E_k
+        :param mask:    B*F_l*F_t
+        :return:        B*F_l*(nhead * d_v)
+        '''
+        residual = q
+        q = rearrange(self.w_qs(q), 'b l (head k) -> head b l k', head=self.nhead)
+        k = rearrange(self.w_ks(k), 'b t (head k) -> head b t k', head=self.nhead)
+        v = rearrange(self.w_vs(v), 'b t (head v) -> head b t v', head=self.nhead)
+        attn = torch.einsum('hblk,hbtk->hblt', [q, k]) / np.sqrt(q.shape[-1])
         if mask is not None:
-            mask = mask.unsqueeze(1)                                    # B*1*N*N
-
-        y, attn = self.attn_layer(q, k, v, mask=mask)                   # B*H*F*Ev,
-
-        y = y.transpose(1, 2).contiguous().view(bsz, seq_len, -1)       # B*F*(HxEv)
-        y = self.dropout(self.fc(y))                                    # B*F*E
-        y += residual
-        y = self.layer_norm(y)                                          # B*F*E
-        return y, attn
+            attn = attn.masked_fill(mask[None], -np.inf)
+        attn = torch.softmax(attn, dim=3)
+        output = torch.einsum('hblt,hbtv->hblv', [attn, v])
+        output = rearrange(output, 'head b l v -> b l (head v)')
+        output = self.dropout(self.fc(output))
+        output = self.layer_norm(output + residual)
+        return output, attn

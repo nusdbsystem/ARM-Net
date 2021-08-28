@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from models.snn import SNN, SNN_CONFIGS
 from models.armnet import ARMNetModel, ARM_CONFIG
+from models.perceiverio import PerceiverTab, PERCEIVER_CONFIG
 
 
 def create_model(config, logger=None, verbose=False):
@@ -10,6 +11,9 @@ def create_model(config, logger=None, verbose=False):
 
     if config['model'] == 'snn':
         model = SNN(config['nfeat'], config['nclass'], config)
+    elif config['model'] == 'perceiver':
+        model = PerceiverTab(config['nclass'], config['nfeat'], config['nfeat'], config['nemb'],
+                             config['depth'], config['n_in_query'], config['n_attn_head'], config['hid_dim'])
     elif config['model'] == 'armnet':
         model = ARMNetModel(config['nclass'], config['nfeat'], config['nfeat'], config['nemb'],
                             config['alpha'], config['arm_hid'], config['mlp_layer'], config['mlp_hid'],
@@ -25,6 +29,8 @@ def create_model(config, logger=None, verbose=False):
 def get_config(model):
     if model == 'snn':
         return SNN_CONFIGS
+    elif model == 'perceiver':
+        return PERCEIVER_CONFIG
     elif model == 'armnet':
         return ARM_CONFIG
     else:
