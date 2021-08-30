@@ -195,18 +195,18 @@ PERCEIVER_CONFIG = {
     # training config
     'lr': 1e-3,
     # model config - grid search
-    'nemb': tune.grid_search([1, 4, 8, 16, 32]),
-    'depth': tune.grid_search([1, 2, 3, 4]),
-    'n_in_query': tune.grid_search([16, 32, 64]),
-    'n_attn_head': tune.grid_search([1, 2]),
+    'nemb': tune.grid_search([2, 4, 8, 16, 32]),
+    'depth': tune.grid_search([1, 2, 4]),
+    'n_in_query': tune.grid_search([8, 16, 32, 64]),
+    'n_attn_head': tune.grid_search([1, 2, 4, 8]),
     'hid_dim': tune.grid_search([16, 32, 64]),
 }
-
+# nemb * hid_dim * n_in_query * nfield + hid_dim * hid_dim*n_attn_head
 
 class PerceiverTab(nn.Module):
     """
     Model: Perceiver IO for Structured Data
-    Ref:   G Klambauer, et al. Perceiver IO: A General Architecture for Structured Inputs & Outputs, 2021.
+    Ref:   A. Jaegle, et al. Perceiver IO: A General Architecture for Structured Inputs & Outputs, 2021.
     """
     def __init__(self, nclass, nfield, nfeat, nemb, depth, n_in_query=128, n_attn_head=8, hid_dim=64):
         super().__init__()
