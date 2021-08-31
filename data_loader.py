@@ -18,7 +18,7 @@ def uci_loader(data_dir, batch_size=0, valid_perc=0., workers=2, verbose=True):
 
     def uci_validation_set(X, y, split_perc):
         return sklearn.model_selection.train_test_split(
-            X, y, test_size=split_perc, random_state=0)
+            X, y, test_size=split_perc, random_state=0, stratify=y)
 
     def make_loader(X, y, transformer=None, batch_size=64, drop_last=False):
         if transformer is None:

@@ -30,14 +30,13 @@ def get_args():
     parser.add_argument('--data_dir', default='/home/shaofeng/ARM-Net/data/uci', type=str, help='dataset dir path')
     parser.add_argument('--dataset', default='abalone', type=str, help='dataset name')
     parser.add_argument('--metric', default='acc', type=str, help='evaluation metric')
-    parser.add_argument('--valid_perc', default=0.15, type=float, help='validation percent split from trainset')
-    parser.add_argument('--repeat', type=int, default=3, help='number of repeats with seeds [seed, seed+repeat)')
+    parser.add_argument('--valid_perc', default=0.2, type=float, help='validation percent split from trainset')
+    parser.add_argument('--repeat', type=int, default=5, help='number of repeats with seeds [seed, seed+repeat)')
     parser.add_argument('--seed', type=int, default=2021, help='seed for reproducibility')
     # ray auto-tune params
     parser.add_argument('--max_epochs', default=100, type=int, help='max training epoch')
     parser.add_argument('--ray_dir', default='./ray_results', type=str, help='ray log dir')
     parser.add_argument('--gpus_per_trial', default=0.2, type=float, help='gpus per trial (default 5 trials per GPU)')
-    parser.add_argument("--resume", action="store_true", default=False, help="whether to resume ray tuning")
     args = parser.parse_args()
     return args
 
@@ -141,7 +140,6 @@ def main(num_samples, gpus_per_trial):
             progress_reporter=reporter,
             local_dir=args.ray_dir,
             verbose=2,
-            resume=args.resume,
             trial_name_creator=lambda trial: f'{trial.trial_id}'
         )
         # store the stats of all the evaluated hyper-params to csv
