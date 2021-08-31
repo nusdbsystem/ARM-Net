@@ -102,6 +102,7 @@ def worker(config, checkpoint_dir=None, data_dir=None):
     config['model'] = args.model
     model = create_model(config, plogger)
     device = to_device(model)
+    param_size = sum([p.data.nelement() for p in model.parameters()])
     # optimizer (Adam vs. SGD)
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
 
@@ -117,15 +118,15 @@ def worker(config, checkpoint_dir=None, data_dir=None):
         # early stop once not improving,
         if stopper.stop(val_acc): break
         # reporting metrics (for ray.tune, last reported statistics corresponds to the best epoch)
-        tune.report(val_loss=val_loss, val_acc=val_acc, test_loss=test_loss, test_acc=test_acc)
+        tune.report(val_loss=val_loss, val_acc=val_acc, test_loss=test_loss, test_acc=test_acc, size=param_size)
         print(f'epoch-{epoch} val_acc-{val_acc} test_acc-{test_acc} config: {config}')
 
 
 def main(num_samples, gpus_per_trial):
     config = get_config(args.model)
-    reporter = CLIReporter(metric_columns=["val_acc", "test_acc", "training_iteration"])
+    reporter = CLIReporter(metric_columns=["val_acc", "test_acc", "size", "training_iteration"])
     max_concurrent = torch.cuda.device_count() / gpus_per_trial
-    repeat_acc, repeat_loss, repeat_rho = [], [], []
+    repeat_acc, repeat_loss, repeat_rho, repeat_size = [], [], [], []
     for seed in range(args.seed, args.seed+args.repeat):
         # set random seeds
         torch.manual_seed(seed); np.random.seed(seed)
@@ -147,7 +148,8 @@ def main(num_samples, gpus_per_trial):
         df.to_csv(f'{log_dir}results_{seed}.csv')
         # settings affecting the final model selected: 1. get_best_trial scope, 2. stopper, 3. final_run data split
         best_trial = analysis.get_best_trial("val_acc", "max", "all")
-        plogger(f'Repeat-{seed}\tbest trial id: {best_trial.trial_id} config: {best_trial.config}\t'
+        plogger(f'Repeat-{seed}\tbest trial id: {best_trial.trial_id}'
+                f'config: {best_trial.config}\tparameter size: {best_trial.last_result["size"]}\t'
                 f'last val loss: {best_trial.last_result["val_loss"]} val acc: {best_trial.last_result["val_acc"]}\t'
                 f'test loss: {best_trial.last_result["test_loss"]} test acc: {best_trial.last_result["test_acc"]}')
         # calculate the spearman correlation between val_acc and test_acc (optional, for ablation)
@@ -155,11 +157,12 @@ def main(num_samples, gpus_per_trial):
         plogger(f'Repeat-{seed}\tspearman correlation: {rho}({pval})\n')
         # store the stats
         repeat_acc.append(best_trial.last_result["test_acc"]);repeat_loss.append(best_trial.last_result["test_loss"])
-        repeat_rho.append(rho)
+        repeat_rho.append(rho); repeat_size.append(best_trial.last_result["size"])
 
     plogger(f'Final report results: loss {np.mean(repeat_loss):.4f}/{np.std(repeat_loss):.4f}\t '
             f'accuracy {np.mean(repeat_acc):.4f}/{np.std(repeat_acc):.4f}\t'
-            f'spearman correlation {np.mean(repeat_rho):.4f}/{np.std(repeat_rho):.4f}')
+            f'spearman correlation {np.mean(repeat_rho):.4f}/{np.std(repeat_rho):.4f}\t'
+            f'avg parameter size {np.mean(repeat_size):.4f}/{np.std(repeat_size):.4f}')
 
 if __name__ == "__main__":
     main(num_samples=1, gpus_per_trial=args.gpus_per_trial)
