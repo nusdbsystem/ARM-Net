@@ -110,7 +110,10 @@ def worker(config, checkpoint_dir=None, data_dir=None):
     stopper = PlateauStopper(patience=0, avg_num=1)
     for epoch in range(0, args.max_epochs):
         # train one epoch
-        train_one_epoch(model, train_loader, optimizer, device)
+        try:
+            train_one_epoch(model, train_loader, optimizer, device)
+        except Exception as e:
+            print(f'Exception {e} when evaluating config: {config} at epoch-{epoch}'); break
         # ray.tune: validate
         val_acc, val_loss = evaluate(model, val_loader, metric=args.metric)
         # also evaluate on test_set for reporting results

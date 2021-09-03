@@ -63,7 +63,6 @@ class ARMNetModel(nn.Module):
 
         # embedding
         self.embedding = Embedding(nfeat, nemb)
-        self.emb_bn = nn.BatchNorm1d(nfield)
 
         # arm
         self.attn_layer = SparseAttLayer(nfield, nemb, self.arm_hid, alpha)

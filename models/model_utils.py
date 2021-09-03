@@ -1,5 +1,8 @@
 import torch
 import torch.nn as nn
+from models.lr import LRModel, LR_CONFIG
+from models.fm import FMModel, FM_CONFIG
+from models.dnn import DNNModel, DNN_CONFIG
 from models.snn import SNN, SNN_CONFIGS
 from models.armnet import ARMNetModel, ARM_CONFIG
 from models.perceiverio import PerceiverTab, PERCEIVER_CONFIG
@@ -9,7 +12,14 @@ def create_model(config, logger=None, verbose=False):
     if logger is None: logger = print
     if verbose: logger(f'=> creating model {config}')
 
-    if config['model'] == 'snn':
+    if config['model'] == 'lr':
+        model = LRModel(config['nclass'], config['nfeat'])
+    elif config['model'] == 'fm':
+        model = FMModel(config['nclass'], config['nfeat'], config['nemb'])
+    elif config['model'] == 'dnn':
+        model = DNNModel(config['nclass'], config['nfeat'], config['nfeat'], config['nemb'],
+                         config['mlp_layers'], config['mlp_hid'], config['dropout'])
+    elif config['model'] == 'snn':
         model = SNN(config['nfeat'], config['nclass'], config)
     elif config['model'] == 'perceiver':
         model = PerceiverTab(config['nclass'], config['nfeat'], config['nfeat'], config['nemb'],
@@ -27,7 +37,13 @@ def create_model(config, logger=None, verbose=False):
 
 
 def get_config(model):
-    if model == 'snn':
+    if model == 'lr':
+        return LR_CONFIG
+    elif model == 'fm':
+        return FM_CONFIG
+    elif model == 'dnn':
+        return DNN_CONFIG
+    elif model == 'snn':
         return SNN_CONFIGS
     elif model == 'perceiver':
         return PERCEIVER_CONFIG

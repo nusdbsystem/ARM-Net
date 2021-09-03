@@ -1,0 +1,7 @@
+tqdm==4.47.0
+einops==0.3.0
+numpy==1.18.5
+scipy==1.4.1
+ray==1.5.1
+torch==1.6.0
+scikit_learn==0.24.2

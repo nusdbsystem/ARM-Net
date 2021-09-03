@@ -12,9 +12,9 @@ There are 121 multi-class real-world classification tasks, whose features are **
 
 | Model |  Code | Reference |
 |-------|-----|-----------|
-| Self-Normalizing Neural Networks | SNN, [snn.py](https://github.com/nusdbsystem/ARM-Net/blob/uci_ray/models/snn.py) | [G Klambauer, et al. Self-Normalizing Neural Networks, 2017.](https://arxiv.org/pdf/1706.02515.pdf) |
-| Perceiver IO | Perceiver-IO, [perceiverio.py](https://github.com/nusdbsystem/ARM-Net/blob/uci_ray/models/perceiverio.py) | [A. Jaegle, et al. Perceiver IO: A General Architecture for Structured Inputs & Outputs, 2021.](https://arxiv.org/pdf/2107.14795.pdf) |
-| ARM-Net | ARM-Net/ARM-Net+, [armnet.py](https://github.com/nusdbsystem/ARM-Net/blob/uci_ray/models/armnet.py) | [S Cai, et al. ARM-Net: Adaptive Relation Modeling Network for Structured Data, 2021.](https://dl.acm.org/doi/10.1145/3448016.3457321) |
+| Self-Normalizing Neural Networks | SNN, [snn.py](https://github.com/nusdbsystem/ARM-Net/blob/uci/models/snn.py) | [G Klambauer, et al. Self-Normalizing Neural Networks, 2017.](https://arxiv.org/pdf/1706.02515.pdf) |
+| Perceiver IO | Perceiver-IO, [perceiverio.py](https://github.com/nusdbsystem/ARM-Net/blob/uci/models/perceiverio.py) | [A. Jaegle, et al. Perceiver IO: A General Architecture for Structured Inputs & Outputs, 2021.](https://arxiv.org/pdf/2107.14795.pdf) |
+| ARM-Net | ARM-Net/ARM-Net+, [armnet.py](https://github.com/nusdbsystem/ARM-Net/blob/uci/models/armnet.py) | [S Cai, et al. ARM-Net: Adaptive Relation Modeling Network for Structured Data, 2021.](https://dl.acm.org/doi/10.1145/3448016.3457321) |
 
 ### How to Download Datasets
 

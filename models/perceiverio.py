@@ -195,11 +195,11 @@ PERCEIVER_CONFIG = {
     # training config
     'lr': 1e-3,
     # model config - grid search
-    'nemb': tune.grid_search([1, 2, 4, 8, 16, 32]),
+    'nemb': tune.grid_search([2, 4, 8, 16, 32]),
     'depth': tune.grid_search([1, 2, 4]),
-    'n_in_query': tune.grid_search([8, 16, 32, 64]),
-    'n_attn_head': tune.grid_search([1, 2, 4, 8]),
-    'hid_dim': tune.grid_search([16, 32, 64]),
+    'n_in_query': tune.grid_search([4, 8, 16, 32]),
+    'n_attn_head': 8,
+    'hid_dim': tune.grid_search([4, 8, 16, 32]),
 }
 
 class PerceiverTab(nn.Module):
