@@ -29,9 +29,7 @@ class DNNModel(torch.nn.Module):
                 MLP(nfield*nemb, mlp_layers, mlp_hid, dropout, noutput=nclass)
             )
         else:
-            self.classifier = nn.Sequential(
-                MLP(nfeat, mlp_layers, mlp_hid, dropout, noutput=nclass)
-            )
+            self.classifier = MLP(nfeat, mlp_layers, mlp_hid, dropout, noutput=nclass)
 
     def forward(self, x):
         """
