@@ -1,6 +1,6 @@
 ## ARM-Net: Adaptive Relation Modeling Network for Structured Data
 
-![version](https://img.shields.io/badge/version-v1.0-green)
+![version](https://img.shields.io/badge/version-v3.5-green)
 ![python](https://img.shields.io/badge/python-3.8.3-blue)
 ![pytorch](https://img.shields.io/badge/pytorch-1.6.0-brightgreen)
 ![singa](https://img.shields.io/badge/singa-3.1.0-orange)
@@ -15,7 +15,7 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 ### Benchmark Dataset
 
-#### Large Real-world Dataset (reported in the [ARM-Net paper](https://dl.acm.org/doi/10.1145/3448016.3457321))
+#### Large Real-world Datasets (reported in the [ARM-Net paper](https://dl.acm.org/doi/10.1145/3448016.3457321))
 
 * [Frappe - App Recommendation](https://www.baltrunas.info/research-menu/frappe)
 * [MovieLens - Movie Recommendation](https://grouplens.org/datasets/movielens)
@@ -23,11 +23,15 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 * [Criteo - Display Advertising Challenge](https://labs.criteo.com/2014/02/kaggle-display-advertising-challenge-dataset/)
 * [Diabetes130 - Diabetes Readmission Prediction](https://archive.ics.uci.edu/ml/datasets/diabetes+130-us+hospitals+for+years+1999-2008)
 
-#### Small to Medium Tabular Datasets ([121 UCI datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf))
+#### Small to Medium Tabular Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
 
-> We also evaluated prior arts, latest models and our ARM-Net on the [UCI datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://arxiv.org/pdf/2107.14795.pdf).
+> We also evaluated prior arts, latest models and our ARM-Net on the [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
 > 
 > **Models** and **Utilities** for evaluating models on [121 UCI Datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf) are included in this [repository](https://github.com/nusdbsystem/ARM-Net/tree/uci).
+> 
+> The main results on these datasets are summarized [here](https://github.com/nusdbsystem/ARM-Net/tree/uci#main-results-evaluated-on-first-36121-datasets-updating), where ARM-Net achieves overall best performance.
+> 
+> 
 
 ### Baseline Model
 
