@@ -15,12 +15,19 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 ### Benchmark Dataset
 
+#### Large Real-world Dataset (reported in the [ARM-Net paper](https://dl.acm.org/doi/10.1145/3448016.3457321))
 
 * [Frappe - App Recommendation](https://www.baltrunas.info/research-menu/frappe)
 * [MovieLens - Movie Recommendation](https://grouplens.org/datasets/movielens)
 * [Avazu - Click-Through Rate Prediction](https://www.kaggle.com/c/avazu-ctr-prediction)
 * [Criteo - Display Advertising Challenge](https://labs.criteo.com/2014/02/kaggle-display-advertising-challenge-dataset/)
 * [Diabetes130 - Diabetes Readmission Prediction](https://archive.ics.uci.edu/ml/datasets/diabetes+130-us+hospitals+for+years+1999-2008)
+
+#### Small to Medium Tabular Datasets ([121 UCI datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf))
+
+> We also evaluated prior arts, latest models and our ARM-Net on the [UCI datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://arxiv.org/pdf/2107.14795.pdf).
+> 
+> **Models** and **Utilities** for evaluating models on [121 UCI Datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf) are included in this [repository](https://github.com/nusdbsystem/ARM-Net/tree/uci).
 
 ### Baseline Model
 
@@ -47,7 +54,7 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 ### Citation
 
-If you use our code in your research, please kindly cite:
+If you use our code in your research, please cite:
 ```
 @inproceedings{DBLP:conf/sigmod/CaiZ0JOZ21,
   author    = {Shaofeng Cai and
