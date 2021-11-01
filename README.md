@@ -44,7 +44,7 @@ There are 121 ***multi-class*** real-world classification tasks, whose features 
 >
 > 1. For each dataset, the fixed train set is split into [4:1 train/valid set](https://github.com/nusdbsystem/ARM-Net/blob/uci/train.py#L99), where hyper-parameters of each model are grid searched.
 > 2. Each model is configured with a hyper-parameter search space, e.g., [ARM-Net CONFIG](https://github.com/nusdbsystem/ARM-Net/blob/uci/models/armnet.py#L37), with around 100~200 configs.
-> 3. The config of hyper-params with the [highest valid set accuracy](https://github.com/nusdbsystem/ARM-Net/blob/uci/train.py#L153) is used for reporting the final results on the test set.
+> 3. The model trained with hyper-params of the [highest valid set accuracy](https://github.com/nusdbsystem/ARM-Net/blob/uci/train.py#L153) is directly used for reporting results on the test set.
 > 4. Reporting (`mean/std` of accuracy) by repeating the above steps with [5 independent runs](https://github.com/nusdbsystem/ARM-Net/blob/uci/train.py#L133).
 
 ### How to Download Datasets
