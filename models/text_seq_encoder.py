@@ -65,8 +65,8 @@ class TextSeqEncoder(nn.Module):
 
     def forward(self, text: Tensor) -> Tensor:
         """
-        :param text:    bsz*nstep*seq_len
-        :return:        bsz*nstep*d_model
+        :param text:    [bsz, nstep, seq_len]
+        :return:        [bsz, nstep, d_model]
         """
         bsz, nstep, seq_len = text.size()
         text = rearrange(text, 'b t l -> (b t) l')                      # (bsz*nstep)*seq_len

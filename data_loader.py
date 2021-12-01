@@ -49,7 +49,6 @@ class LogDataset(Dataset):
         # two special tokens (bos/pad) following regular token idx
         self.bos_idx: int = vocab_sizes[-1]
         self.pad_idx: int = self.bos_idx + 1
-        self.vocab_size = self.pad_idx + 1
         print(f'===>>> processing {self.nsamples} logs ...')
         with tqdm(total=self.nsamples) as pbar:
             for idx in range(len(raw_text)):
@@ -62,6 +61,9 @@ class LogDataset(Dataset):
 
         # label: field -1
         self.y = torch.tensor(raw_data[:, -1].astype(np.int64), dtype=torch.long)
+
+        # vocab_size of (all tabular features, text)
+        self.vocab_sizes = (sum(vocab_sizes[:-1]), self.pad_idx + 1)
 
     def __len__(self):
         return self.nsamples
@@ -104,7 +106,7 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: List[int],
     dataset = LogDataset(data, nstep, vocab_sizes, max_seq_len)
     data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True,
                              num_workers=workers, collate_fn=dataset.generate_batch)
-    return data_loader, dataset.vocab_size
+    return data_loader, dataset.vocab_sizes
 
 
 def log_loader(data_dir: str, nstep: int,
@@ -121,15 +123,15 @@ def log_loader(data_dir: str, nstep: int,
     :param valid_perc:      validation percentage
     :param test_perc:       test percentage
     :param workers:         number of workers to load data
-    :return:                train/valid/test data loader, total vocabulary size
+    :return:                train/valid/test data loader, vocabulary sizes tuple (tabular, text)
     """
     data = pickle.load(open(data_dir, 'rb'))
     nsamples = len(data)-nstep
     n_train, n_valid, n_test = int(nsamples*(1-valid_perc-test_perc)), \
                               int(nsamples*valid_perc), int(nsamples*test_perc)
 
-    train_loader, vocab_size = _loader(data[:n_train+nstep], nstep, vocab_sizes, max_seq_len, bsz, workers)
+    train_loader, ret_vocab_sizes = _loader(data[:n_train+nstep], nstep, vocab_sizes, max_seq_len, bsz, workers)
     valid_loader, _ = _loader(data[n_train:n_train+n_valid+nstep], nstep, vocab_sizes, max_seq_len, bsz, workers)
     test_loader, _ = _loader(data[-n_test-nstep:], nstep, vocab_sizes, max_seq_len, bsz, workers)
 
-    return train_loader, valid_loader, test_loader, vocab_size
+    return train_loader, valid_loader, test_loader, ret_vocab_sizes

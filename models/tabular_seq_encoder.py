@@ -6,11 +6,14 @@ import torch.nn as nn
 
 
 class TabularSeqEncoder(nn.Module):
-    def __init__(self, nstep: int, nfeat: int, nemb: int, nhid: int, d_hid: int):
+    def __init__(self, nstep: int, nfield: int, nfeat: int,
+                 nemb: int, nhid: int, d_hid: int):
         """ Time-series Tabular Data Encoder """
         super(TabularSeqEncoder, self).__init__()
-        # self.pos_embedding =
-        # self.feat_embedding
+        self.total_fields: int = nstep * nfield
+
+        self.global_embedding = nn.Embedding(self.total_fields, nemb)
+        self.feat_embedding = nn.Embedding(nfeat, nemb)
 
 
     def forward(self, x: Tensor) -> Tensor:
