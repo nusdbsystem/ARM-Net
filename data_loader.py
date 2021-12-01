@@ -1,180 +1,135 @@
-import glob
 from tqdm import tqdm
+import pickle
+import numpy as np
+from typing import Tuple, List, Dict, Iterable, Union
 
 import torch
-from torch.utils.data import Dataset, DataLoader, TensorDataset
-
-import os
-import numpy as np
-import sklearn.model_selection
-from scipy.io.arff import loadarff
-
-class LibsvmDataset(Dataset):
-    """ Dataset loader for Libsvm data format """
-    def __init__(self, fname, nfields):
-
-        def decode_libsvm(line):
-            columns = line.split(' ')
-            map_func = lambda pair: (int(pair[0]), float(pair[1]))
-            ids, vals = zip(*map(lambda col: map_func(col.split(':')), columns[1:]))
-            sample = {'ids': torch.LongTensor(ids),
-                      'vals': torch.FloatTensor(vals),
-                      'y': float(columns[0])}
-            return sample
-
-        with open(fname) as f:
-            sample_lines = sum(1 for line in f)
-
-        self.feat_ids = torch.LongTensor(sample_lines, nfields)
-        self.feat_vals = torch.FloatTensor(sample_lines, nfields)
-        self.y = torch.FloatTensor(sample_lines)
-
-        self.nsamples = 0
-        with tqdm(total=sample_lines) as pbar:
-            with open(fname) as fp:
-                line = fp.readline()
-                while line:
-                    try:
-                        sample = decode_libsvm(line)
-                        self.feat_ids[self.nsamples] = sample['ids']
-                        self.feat_vals[self.nsamples] = sample['vals']
-                        self.y[self.nsamples] = sample['y']
-                        self.nsamples += 1
-                    except Exception:
-                        print(f'incorrect data format line "{line}" !')
-                    line = fp.readline()
-                    pbar.update(1)
-        print(f'# {self.nsamples} data samples loaded...')
-
-    def __len__(self):
-        return self.nsamples
-
-    def __getitem__(self, idx):
-        return {'ids': self.feat_ids[idx],
-                'vals': self.feat_vals[idx],
-                'y': self.y[idx]}
-
-def libsvm_dataloader(args):
-    data_dir = args.data_dir + args.dataset
-    train_file = glob.glob("%s/tr*libsvm" % data_dir)[0]
-    val_file = glob.glob("%s/va*libsvm" % data_dir)[0]
-    test_file = glob.glob("%s/te*libsvm" % data_dir)[0]
-
-    train_loader = DataLoader(LibsvmDataset(train_file, args.nfield),
-                              batch_size=args.batch_size, shuffle=True,
-                              num_workers=args.workers, pin_memory=True)
-    val_loader = DataLoader(LibsvmDataset(val_file, args.nfield),
-                            batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.workers, pin_memory=True)
-    test_loader = DataLoader(LibsvmDataset(test_file, args.nfield),
-                            batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.workers, pin_memory=True)
-
-    return train_loader, val_loader, test_loader
+from torch import Tensor
+from torch.utils.data import Dataset, DataLoader
 
 
-class UCILibsvmDataset(Dataset):
-    """ Dataset loader for loading UCI dataset of Libsvm format """
-    def __init__(self, X, y):
-        assert X.shape[0] == y.shape[0]
-        self.nsamples, self.nfeat = X.shape
+__HDFS_vocab_sizes__: List[int] = [24, 60, 60, 27799, 2, 9, 79+3445254+27522]
+__BGL_vocab_sizes__: List[int] = [69251, 24, 60, 60, 100, 6, 14, 10, 648+359228+156004]
+vocab_size_map: Dict[str, List[int]] = {
+    'hdfs': __HDFS_vocab_sizes__,
+    'bgl': __BGL_vocab_sizes__
+}
 
-        self.feat_ids = torch.LongTensor(self.nsamples, self.nfeat)
-        self.feat_vals = torch.FloatTensor(self.nsamples, self.nfeat)
-        self.y = torch.FloatTensor(self.nsamples)
 
+class LogDataset(Dataset):
+    """ Dataset for Log Data """
+    def __init__(self, raw_data: np.ndarray, nstep: int,
+                 vocab_sizes: List[int], max_seq_len: int):
+        self.nstep = nstep
+        self.nsamples = len(raw_data) - nstep
+        self.max_seq_len = max_seq_len
+
+        # sample format: [tabular; text, label]
+        nfields = len(raw_data[0])
+        assert (len(vocab_sizes) == nfields-1), \
+            f"vocab_sizes {len(vocab_sizes)} and data fields {nfields} not match"
+        # offsets for tabular embedding
+        offsets = np.zeros(nfields-2, dtype=np.int64)
+        offsets[1:] = np.cumsum(vocab_sizes)[:-2]
+
+        # tabular: fields 0~nfield-3
+        self.tabular = raw_data[:, :-2].astype(np.int64)
+        for col in range(nfields-2):
+            # cap at vocab_size
+            cap_mask = self.tabular[:, col] >= vocab_sizes[col]-1
+            self.tabular[cap_mask, col] = vocab_sizes[col]-1
+
+            # add offset, sharing one embedding layer for all tabular features
+            self.tabular[:, col] += offsets[col]
+        self.tabular = torch.tensor(self.tabular, dtype=torch.long)
+
+        # text: field nfield-2
+        raw_text = raw_data[:, -2]
+        self.text = []
+        # two special tokens (bos/pad) following regular token idx
+        self.bos_idx: int = vocab_sizes[-1]
+        self.pad_idx: int = self.bos_idx + 1
+        self.vocab_size = self.pad_idx + 1
+        print(f'===>>> processing {self.nsamples} logs ...')
         with tqdm(total=self.nsamples) as pbar:
-            ids = torch.LongTensor(range(self.nfeat))
-            for idx in range(self.nsamples):
-                self.feat_ids[idx] = ids
-                self.feat_vals[idx] = torch.FloatTensor(X[idx])
-                self.y[idx] = y[idx]
-
+            for idx in range(len(raw_text)):
+                # prepend bos token
+                sentence = torch.full([len(raw_text[idx])+1], self.bos_idx, dtype=torch.long)
+                sentence[1:] = torch.tensor(raw_text[idx])
+                self.text.append(sentence)
+                # update progress bar
                 pbar.update(1)
-        print(f'Data loader: {self.nsamples} data samples')
+
+        # label: field -1
+        self.y = torch.tensor(raw_data[:, -1].astype(np.int64), dtype=torch.long)
 
     def __len__(self):
         return self.nsamples
 
     def __getitem__(self, idx):
-        return {'ids': self.feat_ids[idx],
-                'vals': self.feat_vals[idx],
-                'y': self.y[idx]}
+        return {
+            'tabular': self.tabular[idx: idx+self.nstep],       # nstep*nfield-2
+            'text': self.text[idx: idx+self.nstep],             # [len_1, len_2, ..., len_nstep]
+            'y': self.y[idx+self.nstep]                         # 1
+        }
 
-def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
-    '''
-    :param data_dir:        Path to load the uci dataset
-    :param batch_size:      Batch size
-    :param valid_perc:      valid percentage split from train (default 0, whole train set)
-    :param libsvm:          Libsvm loader of format {'ids', 'vals', 'y'}
-    :param workers:         the number of subprocesses to load data
-    :return:                train/valid/test loader, train_loader.nclass
-    '''
+    def generate_batch(self, batch: List[Dict[str, Union[Tensor, Iterable]]]) -> Dict[str, Tensor]:
+        """
+        :param batch:   a batch of samples
+        :return:
+        """
+        bsz = len(batch)
+        tabular = torch.stack([sample['tabular'] for sample in batch], dim=0)           # bsz*nstep*nfield-2
 
-    def uci_validation_set(X, y, split_perc=0.2):
-        return sklearn.model_selection.train_test_split(
-            X, y, test_size=split_perc, random_state=0)
+        # text
+        max_seq_lens: List[int] = [max(map(len, sample['text'])) for sample in batch]
+        max_seq_len: int = max(self.max_seq_len, max(max_seq_lens))
+        text = torch.full((bsz, self.nstep, max_seq_len),
+                          fill_value=self.pad_idx, dtype=torch.long)                    # bsz*nstep*max_seq_len
+        for idx in range(bsz):
+            for step in range(self.nstep):
+                seq = batch[idx]['text'][step]
+                text[idx, step, :len(seq)] = seq
 
-    def make_loader(X, y, transformer=None, batch_size=64):
-        if transformer is None:
-            transformer = sklearn.preprocessing.StandardScaler()
-            transformer.fit(X)
-        X = transformer.transform(X)
-        if libsvm:
-            return DataLoader(UCILibsvmDataset(X, y),
-                              batch_size=batch_size,
-                              shuffle=transformer is None,
-                              num_workers=workers, pin_memory=True
-                              ), transformer
-        else:
-            return DataLoader(
-                dataset=TensorDataset(*[torch.from_numpy(e) for e in [X, y]]),
-                batch_size=batch_size,
-                shuffle=transformer is None,
-                num_workers=workers, pin_memory=True
-            ), transformer
+        y = torch.stack([sample['y'] for sample in batch], dim=0)                       # bsz
+        return {
+            'tabular': tabular,
+            'text': text,
+            'y': y
+        }
 
-    def uci_folder_to_name(f):
-        return f.split('/')[-1]
 
-    def line_to_idx(l):
-        return np.array([int(e) for e in l.split()], dtype=np.int32)
+def _loader(data: np.ndarray, nstep: int, vocab_sizes: List[int],
+            max_seq_len: int, bsz: int, workers: int) -> [DataLoader, int]:
+    dataset = LogDataset(data, nstep, vocab_sizes, max_seq_len)
+    data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True,
+                             num_workers=workers, collate_fn=dataset.generate_batch)
+    return data_loader, dataset.vocab_size
 
-    def load_uci_dataset(folder, train=True):
-        full_file = f'{folder}/{uci_folder_to_name(folder)}.arff'
-        if os.path.exists(full_file):
-            data = loadarff(full_file)
-            train_idx, test_idx = [line_to_idx(l) for l in open(f'{folder}/conxuntos.dat').readlines()]
-            assert len(set(train_idx) & set(test_idx)) == 0
-            all_idx = list(train_idx) + list(test_idx)
-            assert len(all_idx) == np.max(all_idx) + 1
-            assert np.min(all_idx) == 0
-            if train:
-                data = (data[0][train_idx], data[1])
-            else:
-                data = (data[0][test_idx], data[1])
-        else:
-            typename = 'train' if train else 'test'
-            filename = f'{folder}/{uci_folder_to_name(folder)}_{typename}.arff'
-            data = loadarff(filename)
-        assert data[1].types() == ['numeric'] * (len(data[1].types()) - 1) + ['nominal']
-        X = np.array(data[0][data[1].names()[:-1]].tolist())
-        y = np.array([int(e) for e in data[0][data[1].names()[-1]]])
-        nclass = len(data[1]['clase'][1])
-        return X.astype(np.float32), y, nclass
 
-    Xtrain, ytrain, nclass = load_uci_dataset(data_dir)
-    if valid_perc > 0:
-        Xtrain, Xvalid, ytrain, yvalid = uci_validation_set(Xtrain, ytrain, split_perc=valid_perc)
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size)
-        valid_loader, _ = make_loader(Xvalid, yvalid, batch_size=batch_size)
-    else:
-        train_loader, _ = make_loader(Xtrain, ytrain, batch_size=batch_size)
-        valid_loader = train_loader
+def log_loader(data_dir: str, nstep: int,
+               vocab_sizes: List[int], max_seq_len: int, bsz: int,
+               valid_perc: float = 0.1,
+               test_perc: float = 0.1,
+               workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader, int]:
+    """
+    :param data_dir:        path to the pickled dataset
+    :param nstep:           number of time steps
+    :param vocab_sizes:     vocabulary size
+    :param max_seq_len:     max_seq_len for text padding
+    :param bsz:             batch size
+    :param valid_perc:      validation percentage
+    :param test_perc:       test percentage
+    :param workers:         number of workers to load data
+    :return:                train/valid/test data loader, total vocabulary size
+    """
+    data = pickle.load(open(data_dir, 'rb'))
+    nsamples = len(data)-nstep
+    n_train, n_valid, n_test = int(nsamples*(1-valid_perc-test_perc)), \
+                              int(nsamples*valid_perc), int(nsamples*test_perc)
 
-    print(f'{uci_folder_to_name(data_dir)}: {len(ytrain)} training samples loaded.')
-    Xtest, ytest, _ = load_uci_dataset(data_dir, False)
-    test_loader, _ = make_loader(Xtest, ytest, batch_size=batch_size)
-    print(f'{uci_folder_to_name(data_dir)}: {len(ytest)} testing samples loaded.')
-    train_loader.nclass = nclass
-    return train_loader, valid_loader, test_loader
+    train_loader, vocab_size = _loader(data[:n_train+nstep], nstep, vocab_sizes, max_seq_len, bsz, workers)
+    valid_loader, _ = _loader(data[n_train:n_train+n_valid+nstep], nstep, vocab_sizes, max_seq_len, bsz, workers)
+    test_loader, _ = _loader(data[-n_test-nstep:], nstep, vocab_sizes, max_seq_len, bsz, workers)
+
+    return train_loader, valid_loader, test_loader, vocab_size

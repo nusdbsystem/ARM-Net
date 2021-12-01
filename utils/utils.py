@@ -25,12 +25,14 @@ def logger(log_dir, need_time=True, need_stdout=False):
     log.addHandler(fh)
     return log
 
+
 # detach and del logger
 def remove_logger(logger):
     for handler in logger.handlers[:]:
         handler.close()
         logger.removeHandler(handler)
     del logger
+
 
 def timeSince(since=None, s=None):
     if s is None:
@@ -61,24 +63,6 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        wrong_k = batch_size - correct_k
-        res.append(wrong_k.mul_(100.0 / batch_size).item())
-
-    return res
-
-
 def roc_auc_compute_fn(y_preds, y_targets):
     """ IGNITE.CONTRIB.METRICS.ROC_AUC """
     try:
@@ -102,6 +86,7 @@ def roc_auc_compute_fn(y_preds, y_targets):
         print('ValueError: Only one class present in y_true. ROC AUC score is not defined in that case.')
         return 0.
 
+
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
@@ -117,6 +102,7 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size).item())
 
     return res
+
 
 def load_checkpoint(args):
     try:
