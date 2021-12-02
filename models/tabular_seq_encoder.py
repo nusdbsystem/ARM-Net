@@ -10,7 +10,7 @@ class TabularSeqEncoder(nn.Module):
                  nemb: int, alpha: float,  nhid: int, d_hid: int):
         """ Time-series Tabular Data Encoder """
         super(TabularSeqEncoder, self).__init__()
-        self.global_embeddings = nn.Parameter(torch.randn(nstep, nfield, nemb))
+        self.global_embedding = nn.Parameter(torch.randn(nstep, nfield, nemb))
         self.feature_embedding = nn.Embedding(nfeat, nemb)
 
         self.arm = ARMModule(nfield, nemb, d_hid, alpha, nhid)
@@ -25,7 +25,7 @@ class TabularSeqEncoder(nn.Module):
         :return:        [bsz, nstep, nemb], FloatTensor
         """
         bsz = x.size(0)
-        x = self.feature_embedding(x) + self.global_embeddings          # bsz*nstep*nfield*nemb
+        x = self.feature_embedding(x) + self.global_embedding           # bsz*nstep*nfield*nemb
         x = rearrange(x, 'b t f e -> (b t) f e')                        # (bsz*nstep)*nfield*nemb
         x = self.arm(x)                                                 # (bsz*nstep)*nhid*nemb
 
