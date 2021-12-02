@@ -35,8 +35,8 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   [*, x_len, d_model]
-        :return:    [*, x_len, d_model]
+        :param x:   [*, x_len, d_model], FloatTensor
+        :return:    [*, x_len, d_model], FloatTensor
         """
         x = x + self.pe[:x.size(-2), :]                                         # [*, x_len, d_model]
         return self.dropout(x)
@@ -65,8 +65,8 @@ class TextSeqEncoder(nn.Module):
 
     def forward(self, text: Tensor) -> Tensor:
         """
-        :param text:    [bsz, nstep, seq_len]
-        :return:        [bsz, nstep, d_model]
+        :param text:    [bsz, nstep, seq_len], LongTensor
+        :return:        [bsz, nstep, d_model], FloatTensor
         """
         bsz, nstep, seq_len = text.size()
         text = rearrange(text, 'b t l -> (b t) l')                      # (bsz*nstep)*seq_len

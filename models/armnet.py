@@ -11,6 +11,7 @@ class SparseAttention(nn.Module):
         self.sparsemax = nn.Softmax(dim=-1) if alpha == 1. \
             else EntmaxBisect(alpha, dim=-1)
 
+        self.scale = d_k ** -0.5
         self.w_k = nn.Linear(nemb, d_k, bias=False)                     # nemb*d_k
         self.query = nn.Parameter(torch.zeros(nhid, d_k))               # nhid*d_k
         self.values = nn.Parameter(torch.zeros(nhid, nfield))           # nhid*nfield
@@ -22,18 +23,19 @@ class SparseAttention(nn.Module):
 
     def forward(self, x):
         """
-        :param x:       [bsz, nfield, nemb]
-        :return:        Att_weights [bsz, nhid, nfield]
+        :param x:       [bsz, nfield, nemb], FloatTensor
+        :return:        Att_weights [bsz, nhid, nfield], FloatTensor
         """
         keys = self.w_k(x)                                              # bsz*nfield*d_k
-        att_gates = torch.einsum('bfe,oe->bof', keys, self.query)       # bsz*nhid*nfield
+        att_gates = torch.einsum('bfe,oe->bof',
+                                 keys, self.query) * self.scale         # bsz*nhid*nfield
         sparse_gates = self.sparsemax(att_gates)                        # bsz*nhid*nfield
         return torch.einsum('bof,of->bof', sparse_gates, self.values)   # bsz*nhid*nfield
 
 
 class ARMModule(nn.Module):
     """
-    Model:  Adaptive Relation Modeling Network (w/o bilinear weight => One-Head)
+    Model:  Adaptive Relation Modeling Network (w/o bilinear weight => One-Head, no position)
     """
 
     def __init__(self, nfield: int, nemb: int, d_k: int, alpha: float, nhid: int):
@@ -45,8 +47,8 @@ class ARMModule(nn.Module):
 
     def forward(self, x):
         """
-        :param x:       [bsz, nfield, nemb]
-        :return:        [bsz, nhid, nemb]
+        :param x:       [bsz, nfield, nemb], FloatTensor
+        :return:        [bsz, nhid, nemb], FloatTensor
         """
         att_weights = self.attn_layer(x)                                # bsz*nhid*nfield
         interaction = torch.exp(torch.einsum(
