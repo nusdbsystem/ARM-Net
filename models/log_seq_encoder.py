@@ -19,7 +19,7 @@ class LogSeqEncoder(nn.Module):
                  dim_feedforward: int = 2048,
                  dropout: float = 0.1,
                  tcn_layers: int = 3,
-                 l_predictor: int = 2,
+                 predictor_layers: int = 2,
                  d_predictor: int = 512,
                  noutput: int = 1
                  ):
@@ -34,14 +34,14 @@ class LogSeqEncoder(nn.Module):
         :param d_model:             Text Token embedding size
         :param ntokens:             Total number of text tokens
         :param pad_idx:             Padding idx for Text
-        :param nhead:               Number of attention head for Text Encoder
+        :param nhead:               Number of attention heads for Text Encoder
         :param num_layers:          Number of layers for Text Encoder
         :param dim_feedforward:     FFN dimension for Text Encoder
         :param dropout:             Dropout rate for Text Encoder and predictor
         :param tcn_layers:          Number of TCN layers for Tabular & Text
-        :param l_predictor:         FFN layers for predictor
+        :param predictor_layers:    FFN layers for predictor
         :param d_predictor:         FFN dimension for predictor
-        :param noutput:              Number of prediction output for predictor
+        :param noutput:             Number of prediction output for predictor
         """
         super(LogSeqEncoder, self).__init__()
         self.tabular_encoder = TabularSeqEncoder(
@@ -52,7 +52,7 @@ class LogSeqEncoder(nn.Module):
         self.tabular_tcn = TCN(nemb, nlayer=tcn_layers)
         self.text_tcn = TCN(d_model, nlayer=tcn_layers)
 
-        self.predictor = MLP(nemb + d_model, nlayers=l_predictor,
+        self.predictor = MLP(nemb + d_model, nlayers=predictor_layers,
                              nhid=d_predictor, dropout=dropout, noutput=noutput)
 
 

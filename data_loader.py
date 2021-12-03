@@ -16,6 +16,18 @@ vocab_size_map: Dict[str, List[int]] = {
 }
 
 
+def get_vocab_size(dataset: str, tabular_cap: int, text_cap: int) -> List[int] :
+    vocab_sizes = vocab_size_map[dataset]
+    if dataset == 'hdfs':
+        vocab_sizes[3] = tabular_cap
+    elif dataset =='bgl':
+        vocab_sizes[0] = tabular_cap
+    else:
+        raise ValueError(f"incorrect dataset name {dataset}")
+    vocab_sizes[-1] = text_cap
+    return vocab_sizes
+
+
 class LogDataset(Dataset):
     """ Dataset for Log Data """
     def __init__(self, raw_data: np.ndarray, nstep: int,
@@ -52,15 +64,20 @@ class LogDataset(Dataset):
         print(f'===>>> processing {self.nsamples} logs ...')
         with tqdm(total=self.nsamples) as pbar:
             for idx in range(len(raw_text)):
-                # prepend bos token
-                sentence = torch.full([len(raw_text[idx])+1], self.bos_idx, dtype=torch.long)
+                sentence = torch.zeros([len(raw_text[idx])+1], dtype=torch.long)
                 sentence[1:] = torch.tensor(raw_text[idx])
+                # cap at vocab_size
+                cap_mask = sentence >= vocab_sizes[-1]-1
+                sentence[cap_mask] = vocab_sizes[-1]-1
+                # prepend bos token
+                sentence[0] = self.bos_idx
+
                 self.text.append(sentence)
                 # update progress bar
                 pbar.update(1)
 
         # label: field -1
-        self.y = torch.tensor(raw_data[:, -1].astype(np.int64), dtype=torch.long)
+        self.y = torch.tensor(raw_data[:, -1].astype(np.int64), dtype=torch.float)
 
         # vocab_size of (all tabular features, text)
         self.vocab_sizes = (sum(vocab_sizes[:-1]), self.pad_idx + 1)
@@ -85,13 +102,14 @@ class LogDataset(Dataset):
 
         # text
         max_seq_lens: List[int] = [max(map(len, sample['text'])) for sample in batch]
-        max_seq_len: int = max(self.max_seq_len, max(max_seq_lens))
+        max_seq_len: int = min(self.max_seq_len, max(max_seq_lens))
         text = torch.full((bsz, self.nstep, max_seq_len),
                           fill_value=self.pad_idx, dtype=torch.long)                    # bsz*nstep*max_seq_len
         for idx in range(bsz):
             for step in range(self.nstep):
                 seq = batch[idx]['text'][step]
-                text[idx, step, :len(seq)] = seq
+                seq_len = min(max_seq_len, len(seq))
+                text[idx, step, :seq_len] = seq[:seq_len]
 
         y = torch.stack([sample['y'] for sample in batch], dim=0)                       # bsz
         return {
@@ -109,13 +127,13 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: List[int],
     return data_loader, dataset.vocab_sizes
 
 
-def log_loader(data_dir: str, nstep: int,
+def log_loader(data_path: str, nstep: int,
                vocab_sizes: List[int], max_seq_len: int, bsz: int,
                valid_perc: float = 0.1,
                test_perc: float = 0.1,
-               workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader, int]:
+               workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader, Tuple[int, int]]:
     """
-    :param data_dir:        path to the pickled dataset
+    :param data_path:       path to the pickled dataset
     :param nstep:           number of time steps
     :param vocab_sizes:     vocabulary size
     :param max_seq_len:     max_seq_len for text padding
@@ -125,7 +143,7 @@ def log_loader(data_dir: str, nstep: int,
     :param workers:         number of workers to load data
     :return:                train/valid/test data loader, vocabulary sizes tuple (tabular, text)
     """
-    data = pickle.load(open(data_dir, 'rb'))
+    data = pickle.load(open(data_path, 'rb'))
     nsamples = len(data)-nstep
     n_train, n_valid, n_test = int(nsamples*(1-valid_perc-test_perc)), \
                               int(nsamples*valid_perc), int(nsamples*test_perc)

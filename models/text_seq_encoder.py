@@ -8,9 +8,9 @@ from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 
 class Embeddings(nn.Module):
-    def __init__(self, d_model, vocab):
+    def __init__(self, d_model, vocab, padding_idx):
         super(Embeddings, self).__init__()
-        self.lut = nn.Embedding(vocab, d_model)
+        self.lut = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
         self.d_model = d_model
 
     def forward(self, x):
@@ -18,7 +18,8 @@ class Embeddings(nn.Module):
         :param x:       [*]
         :return:        [*, d_model]
         """
-        return self.lut(x) * math.sqrt(self.d_model)
+        return self.lut(x)
+               # * math.sqrt(self.d_model)
 
 
 class PositionalEncoding(nn.Module):
@@ -55,7 +56,7 @@ class TextSeqEncoder(nn.Module):
             f"dim_ff {dim_feedforward} must be divisible by nhead {nhead}"
         self.pad_idx = pad_idx
 
-        self.token_embedding = Embeddings(d_model=d_model, vocab=ntokens)
+        self.token_embedding = Embeddings(d_model=d_model, vocab=ntokens, padding_idx=pad_idx)
         self.pos_embedding = PositionalEncoding(d_model=d_model, dropout=dropout)
 
         encoder_layer = TransformerEncoderLayer(d_model=d_model, nhead=nhead,
@@ -73,7 +74,6 @@ class TextSeqEncoder(nn.Module):
 
         padding_mask = (text == self.pad_idx)                           # (bsz*nstep)*seq_len
         text_emb = self.token_embedding(text)                           # (bsz*nstep)*seq_len*d_model
-
         encoded_text = self.encoder(text_emb,
                                     src_key_padding_mask=padding_mask)  # (bsz*nstep)*seq_len*d_model
         encoded_text = encoded_text.view(bsz, nstep, seq_len, -1)       # bsz*nstep*seq_len*d_model
