@@ -21,7 +21,7 @@ class LogSeqEncoder(nn.Module):
                  tcn_layers: int = 3,
                  predictor_layers: int = 2,
                  d_predictor: int = 512,
-                 noutput: int = 1
+                 noutput: int = 2
                  ):
         """
         :param nstep:               Number of time steps

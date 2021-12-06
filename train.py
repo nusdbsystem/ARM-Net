@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+from typing import Tuple
 
 import torch
 from torch import nn
@@ -10,8 +11,7 @@ from torch import optim
 from data_loader import log_loader, get_vocab_size
 from models.log_seq_encoder import LogSeqEncoder
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
-from utils.utils import roc_auc_compute_fn
-from tensorboardX import SummaryWriter
+from utils.utils import f1_score, F1_Loss
 
 def get_args():
     parser = argparse.ArgumentParser(description='ARMOR framework')
@@ -22,7 +22,7 @@ def get_args():
     parser.add_argument('--tabular_cap', type=int, default=1000, help='feature cap for tabular data')
     parser.add_argument('--text_cap', type=int, default=5000, help='feature cap for text')
     ## tabular
-    parser.add_argument('--nemb', type=int, default=2048, help='tabular embedding size')
+    parser.add_argument('--nemb', type=int, default=32, help='tabular embedding size')
     parser.add_argument('--alpha', default=1.7, type=float, help='entmax alpha to control sparsity in ARM-Module')
     parser.add_argument('--nhid', type=int, default=256, help='number of cross features in ARM-Module')
     parser.add_argument('--d_hid', type=int, default=512, help='inner Query/Key dimension in ARM-Module')
@@ -42,8 +42,8 @@ def get_args():
     # optimizer
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
     parser.add_argument('--patience', type=int, default=1, help='number of epochs for stopping training')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch size')
-    parser.add_argument('--lr', default=0.003, type=float, help='learning rate, default 3e-3')
+    parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+    parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
@@ -55,14 +55,14 @@ def get_args():
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
     parser.add_argument('--tensorboard_dir', default='./tensorboard/', type=str, metavar='PATH',
                         help='path to tensorboard')
-    parser.add_argument('--report_freq', type=int, default=20, help='report frequency')
+    parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2021, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     return args
 
 def main():
-    global args, best_auc, start_time, ret_vocab_sizes
+    global args, best_f1, start_time, ret_vocab_sizes
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     plogger.info(vars(args))
 
@@ -73,9 +73,9 @@ def main():
     plogger.info(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
 
     # optimizer
-    opt_metric = nn.BCEWithLogitsLoss(reduction='mean')
+    opt_metric = F1_Loss()
     if torch.cuda.is_available(): opt_metric = opt_metric.cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     # gradient clipping
     for p in model.parameters():
         p.register_hook(lambda grad: torch.clamp(grad, -1., 1.))
@@ -87,39 +87,43 @@ def main():
 
         # train and eval
         run(epoch, model, train_loader, opt_metric, plogger, optimizer=optimizer)
-        auc_val = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
-        auc_test = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
+        precision, recall, f1 = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
+        precision_test, recall_test, f1_test = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
 
         # record best aue and save checkpoint
-        if auc_val >= best_auc:
-            best_auc = auc_val
-            plogger.info(f'best auc: valid {auc_val:.4f}, test {auc_test:.4f}')
+        if f1 >= best_f1:
+            best_f1 = f1
+            report_f1 = f1_test
+            plogger.info(f'best test: valid {f1:.4f}, test {f1_test:.4f}')
         else:
             patience_cnt += 1
-            plogger.info(f'valid {auc_val:.4f}, test {auc_test:.4f}')
+            plogger.info(f'valid {f1:.4f}, test {f1_test:.4f}')
             plogger.info(f'Early stopped, {patience_cnt}-th best auc at epoch {epoch-1}')
-        if patience_cnt >= args.patience: break
+        if patience_cnt >= args.patience:
+            plogger.info(f'Final best valid auc {best_f1:.4f}, with test auc {report_f1:.4f}')
+            break
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
     remove_logger(plogger)
 
 #  train one epoch of train/val/test
-def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespace='train'):
+def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespace='train') -> Tuple[int, int, int]:
     if optimizer: model.train()
     else: model.eval()
 
     time_avg = AverageMeter()
-    loss_avg, auc_avg = AverageMeter(), AverageMeter()
+    loss_avg, precision_avg = AverageMeter(), AverageMeter()
+    recall_avg, f1_avg = AverageMeter(), AverageMeter()
 
     timestamp = time.time()
     for idx, batch in enumerate(data_loader):
-        target = batch['y'].cuda(non_blocking=True)
+        target = batch['y'].cuda(non_blocking=True).long()
         tabular = batch['tabular'].cuda(non_blocking=True)
         text = batch['text'].cuda(non_blocking=True)
 
         if optimizer:
             y = model(tabular, text)
-            loss = opt_metric(torch.squeeze(y), target)
+            loss = opt_metric(y, target)
 
             optimizer.zero_grad()
             loss.backward()
@@ -127,33 +131,31 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
         else:
             with torch.no_grad():
                 y = model(tabular, text)
-                loss = opt_metric(torch.squeeze(y), target)
+                loss = opt_metric(y, target)
 
-        auc = roc_auc_compute_fn(y, target)
+        precision, recall, f1 = f1_score(target, y)
         loss_avg.update(loss.item(), target.size(0))
-        auc_avg.update(auc, target.size(0))
-
-        # tensorboardX
-        writer.add_scalar(f'{namespace}/auc-step', auc_avg.val, idx+len(data_loader)*epoch)
-        writer.add_scalar(f'{namespace}/loss-step', loss_avg.val, idx+len(data_loader)*epoch)
+        precision_avg.update(precision, target.size(0))
+        recall_avg.update(recall, target.size(0))
+        f1_avg.update(f1, target.size(0))
 
         time_avg.update(time.time() - timestamp)
         timestamp = time.time()
         if idx % args.report_freq == 0:
             plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}]\t'
                          f'{time_avg.val:.3f} ({time_avg.avg:.3f})\t'
-                         f'AUC {auc_avg.val:4f} ({auc_avg.avg:4f})\t'
+                         f'P {precision_avg.val:4f} ({precision_avg.avg:4f})\t'
+                         f'R {recall_avg.val:4f} ({recall_avg.avg:4f})\t'
+                         f'F1 {f1_avg.val:4f} ({f1_avg.avg:4f})\t'
                          f'Loss {loss_avg.val:8.4f} ({loss_avg.avg:8.4f})')
 
         # stop training current epoch for evaluation
         if idx >= args.eval_freq: break
 
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\t'
-                 f'AUC {auc_avg.avg:8.4f}\tLoss {loss_avg.avg:8.4f}')
-    writer.add_scalar(f'{namespace}/auc-epoch', auc_avg.avg, epoch)
-    writer.add_scalar(f'{namespace}/loss-epoch', loss_avg.avg, epoch)
-    writer.flush()
-    return auc_avg.avg
+                 f'Precision {precision_avg.avg:4f}\tRecall {recall_avg.avg:4f}\t'
+                 f'F1-score {f1_avg.avg:4f}\tLoss {loss_avg.avg:8.4f}')
+    return precision_avg.avg, recall_avg.avg, f1_avg.avg
 
 # initialize global variables, load dataset
 args = get_args()
@@ -162,11 +164,10 @@ train_loader, val_loader, \
 test_loader, ret_vocab_sizes = log_loader(args.data_path, args.nstep, vocab_sizes,
                                       args.max_seq_len, args.batch_size, args.valid_perc,
                                       args.test_perc, args.workers)
-start_time, best_auc, base_exp_name = time.time(), 0., args.exp_name
+start_time, best_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
     if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
-    writer = SummaryWriter(f'{os.path.expanduser(args.tensorboard_dir)}{args.exp_name}/')
     main()
-    start_time, best_auc = time.time(), 0.
+    start_time, best_f1 = time.time(), 0.
