@@ -11,14 +11,13 @@ from torch import optim
 from data_loader import log_loader, get_vocab_size
 from models.log_seq_encoder import LogSeqEncoder
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
-from utils.utils import f1_score, F1_Loss
+from utils.utils import f1_score
 
 def get_args():
     parser = argparse.ArgumentParser(description='ARMOR framework')
     parser.add_argument('--exp_name', default='test', type=str, help='exp name for log & checkpoint')
     # model config
     parser.add_argument('--nstep', type=int, default=10, help='number of log events per sequence')
-    parser.add_argument('--nfield', type=int, default=7, help='the number of fields (tabular+text)')
     parser.add_argument('--tabular_cap', type=int, default=1000, help='feature cap for tabular data')
     parser.add_argument('--text_cap', type=int, default=5000, help='feature cap for text')
     ## tabular
@@ -36,18 +35,18 @@ def get_args():
     ## tcn
     parser.add_argument('--tcn_layers', type=int, default=3, help='number of TCN layers for tabular & text')
     ## predictor
-    parser.add_argument('--predictor_layers', type=int, default=3, help='number of layers for predictor')
+    parser.add_argument('--predictor_layers', type=int, default=2, help='number of layers for predictor')
     parser.add_argument('--d_predictor', type=int, default=512, help='FFN dimension for predictor')
 
     # optimizer
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
-    parser.add_argument('--patience', type=int, default=1, help='number of epochs for stopping training')
-    parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+    parser.add_argument('--patience', type=int, default=1, help='number of epochs for early stopping training')
+    parser.add_argument('--batch_size', type=int, default=96, help='batch size')
     parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
-    parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/HDFS_1/small_data.log', help='path to dataset')
+    parser.add_argument('--dataset', type=str, default='bgl', help='dataset name for data_loader')
+    parser.add_argument('--data_path', type=str, default='./data/BGL/encode.log', help='path to dataset')
     parser.add_argument('--valid_perc', default=0.1, type=float, help='validation set percentage')
     parser.add_argument('--test_perc', default=0.1, type=float, help='test set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
@@ -62,19 +61,18 @@ def get_args():
     return args
 
 def main():
-    global args, best_f1, start_time, ret_vocab_sizes
+    global args, best_valid_f1, start_time, ret_vocab_sizes
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     plogger.info(vars(args))
 
-    model = LogSeqEncoder(args.nstep, args.nfield-1, ret_vocab_sizes[0], args.nemb, args.alpha, args.nhid, args.d_hid,
+    model = LogSeqEncoder(args.nstep, args.nfield, ret_vocab_sizes[0], args.nemb, args.alpha, args.nhid, args.d_hid,
                           args.d_model, ret_vocab_sizes[1], ret_vocab_sizes[1]-1, args.nhead, args.num_layers,
                           args.dim_feedforward, args.dropout, args.tcn_layers, args.predictor_layers, args.d_predictor)
     model = torch.nn.DataParallel(model).cuda()
     plogger.info(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
 
     # optimizer
-    opt_metric = F1_Loss()
-    if torch.cuda.is_available(): opt_metric = opt_metric.cuda()
+    opt_metric = nn.CrossEntropyLoss().cuda()
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     # gradient clipping
     for p in model.parameters():
@@ -87,20 +85,20 @@ def main():
 
         # train and eval
         run(epoch, model, train_loader, opt_metric, plogger, optimizer=optimizer)
-        precision, recall, f1 = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
-        precision_test, recall_test, f1_test = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
+        valid_precision, valid_recall, valid_f1 = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
+        test_precidion, test_recall, test_f1 = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
 
-        # record best aue and save checkpoint
-        if f1 >= best_f1:
-            best_f1 = f1
-            report_f1 = f1_test
-            plogger.info(f'best test: valid {f1:.4f}, test {f1_test:.4f}')
+        # record best f1 and save checkpoint
+        if valid_f1 >= best_valid_f1:
+            best_valid_f1 = valid_f1
+            best_test_f1 = test_f1
+            plogger.info(f'best test: valid {valid_f1:.4f}, test {test_f1:.4f}')
         else:
             patience_cnt += 1
-            plogger.info(f'valid {f1:.4f}, test {f1_test:.4f}')
+            plogger.info(f'valid {valid_f1:.4f}, test {test_f1:.4f}')
             plogger.info(f'Early stopped, {patience_cnt}-th best auc at epoch {epoch-1}')
         if patience_cnt >= args.patience:
-            plogger.info(f'Final best valid auc {best_f1:.4f}, with test auc {report_f1:.4f}')
+            plogger.info(f'Final best valid auc {best_valid_f1:.4f}, with test auc {best_test_f1:.4f}')
             break
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
@@ -160,14 +158,15 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
 # initialize global variables, load dataset
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap, args.text_cap)
+args.nfield = len(vocab_sizes)-1
 train_loader, val_loader, \
 test_loader, ret_vocab_sizes = log_loader(args.data_path, args.nstep, vocab_sizes,
                                       args.max_seq_len, args.batch_size, args.valid_perc,
                                       args.test_perc, args.workers)
-start_time, best_f1, base_exp_name = time.time(), 0., args.exp_name
+start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
     if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
     main()
-    start_time, best_f1 = time.time(), 0.
+    start_time, best_valid_f1 = time.time(), 0.

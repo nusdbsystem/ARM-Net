@@ -122,7 +122,7 @@ class LogDataset(Dataset):
 def _loader(data: np.ndarray, nstep: int, vocab_sizes: List[int],
             max_seq_len: int, bsz: int, workers: int) -> [DataLoader, int]:
     dataset = LogDataset(data, nstep, vocab_sizes, max_seq_len)
-    data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True,
+    data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True, drop_last=True,
                              num_workers=workers, collate_fn=dataset.generate_batch)
     return data_loader, dataset.vocab_sizes
 
