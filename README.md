@@ -15,7 +15,7 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 ## Benchmark Datasets
 
-### Large Real-world Datasets
+### ARM-Net for Large Real-world Datasets
 
 * [Frappe - App Recommendation](https://www.baltrunas.info/research-menu/frappe)
 * [MovieLens - Movie Recommendation](https://grouplens.org/datasets/movielens)
@@ -26,14 +26,14 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 #### Summary of Results
 
 > * The main results on these large benchmark datasets are summarized below.
-> * ARM-Net achieves overall best performance.
+> * ARM-Net achieves the overall best performance.
 > * More results and technical details can be found in the [paper](https://dl.acm.org/doi/10.1145/3448016.3457321).
-> 
+> * Note that all the results are reported with a *fixed embedding size* of **10** for a fair comparison (higher AUC can be obtained by increasing the embedding size). 
 
 <img src="https://user-images.githubusercontent.com/14588544/139670215-77544a4b-5bec-4ede-9b58-1ac1a24ff4cd.png" width="660" />
 
 
-### Small to Medium Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
+### ARM-Net for Small to Medium Tabular Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
 
 > * We also implement and evaluate prior arts, latest models and our ARM-Net on the [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
 > 
@@ -58,6 +58,15 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 | SNN | 3rd (6/36) |0.6457/0.0043|  0.9567/0.0389|  0.9000/0.0548|  0.8489/0.0009|  0.2280/0.2671|  0.5841/0.0410|  `0.7200/0.0253`|  0.9058/0.0240|  0.7250/0.1225|  0.8885/0.0019|  0.8885/0.0019|  0.7105/0.0105|  `0.9656/0.0041`|  0.9690/0.0112|  0.6727/0.0903|  `0.6000/0.0690`|  `0.9632/0.0066`|  `0.8008/0.0125`|  0.9029/0.0086|  0.6796/0.0141|  0.9726/0.0061|  0.5779/0.0209|  0.7135/0.0300|  0.9693/0.0100|  0.8491/0.0013|  0.5106/0.0098|  `0.8719/0.0121`|  0.7000/0.0163|  0.9388/0.0269|  0.7877/0.0439|  0.8179/0.035|  0.8714/0.0142|  0.8854/0.0154|  0.7600/0.1180|  0.4804/0.0231|  0.5738/0.0602|
 | Perceiver-IO | 2nd (6/36) |0.6381/0.0143|  `1.0000/0.0000`|  0.9367/0.0531|  0.8521/0.0011|  `0.7600/0.0000`|  0.5602/0.0053|  0.0080/0.0160|  0.8821/0.0166|  `0.7750/0.0500`|  0.8850/0.0000|  0.7620/0.0000|  0.7063/0.0088|  0.9352/0.0313|  0.9556/0.0142|  `0.7596/0.0118`|  0.3208/0.0597|  0.9326/0.0120|  0.5325/0.0861|  0.7817/0.0035|  0.6834/0.0151|  0.8106/0.0895|  `0.6129/0.0000`|  0.5635/0.0817|  0.6732/0.0521|  0.7538/0.0000|  0.4457/0.0122|  0.7745/0.1075|  0.6133/0.0078|  0.4295/0.0754|  0.7662/0.0834|  0.6440/0.0239|  0.8417/0.0295|  0.8807/0.0325|  `0.8560/0.0480`|  0.3010/0.0247|  0.4093/0.0415|
 | `ARM-Net` | `1st (15/36)` |`0.6603/0.0034`|  0.9767/0.0389|  `0.9600/0.0800`|  `0.8562/0.0011`|  0.1500/0.1131|  `0.6487/0.0214`|  0.5520/0.0299|  0.9135/0.0070|  0.7500/0.0791|  `0.8922/0.0012`|  `0.8922/0.0012`|  `0.7203/0.0193`|  0.9530/0.0118|  0.9521/0.0186|  0.6828/0.0485|  0.5170/0.0638|  0.9463/0.0086|  0.7868/0.0054|  `0.9146/0.0051`|  `0.6982/0.0109`|  `0.9826/0.0040`|  0.5760/0.0193|  0.7712/0.0335|  0.9675/0.0115|  `0.8672/0.0028`|  `0.5228/0.0119`|  0.8620/0.0187|  0.7133/0.0305|  0.9497/0.0181|  `0.8338/0.0406`|  0.8214/0.0279|  `0.8844/0.0048`|  0.8750/0.0304|  0.8240/0.0528|  0.4330/0.0526|  `0.6150/0.0232`|
+
+
+### ARM-Net for [Log-Based Anomaly Detection](https://arxiv.org/abs/2107.05908)
+
+> * ARM-Net can also be readily adapted for supporting Log-based Anomaly Detection, which is to detect anomalies given a sequence of history log events.
+> * Each log event consists of tabular data (a fixed number of features) and raw text (a sequence of language tokens).
+> * **Models** and **Utilities** for ARM-Net supporting End-to-end Log-based Anomaly Detection can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/log).
+
+
 
 ### Baseline Models
 
@@ -86,20 +95,7 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 If you use our code in your research, please cite:
 ```
-@inproceedings{DBLP:conf/sigmod/CaiZ0JOZ21,
-  author    = {Shaofeng Cai and
-               Kaiping Zheng and
-               Gang Chen and
-               H. V. Jagadish and
-               Beng Chin Ooi and
-               Meihui Zhang},
-  title     = {ARM-Net: Adaptive Relation Modeling Network for Structured Data},
-  booktitle = {{SIGMOD} '21: International Conference on Management of Data, Virtual
-               Event, China, June 20-25, 2021},
-  pages     = {207--220},
-  publisher = {{ACM}},
-  year      = {2021},
-}
+S. Cai, K. Zheng, G. Chen, H.V. Jagadish, B.C. Ooi, M. Zhang. ARM-Net: Adaptive Relation Modeling Network for Structured Data. ACM International Conference on Management of Data (SIGMOD), 2021
 ```
 
 ### Contact

@@ -10,9 +10,8 @@ from torch import optim
 from data_loader import libsvm_dataloader
 
 from models.model_utils import create_model
-from utils.utils import logger, remove_logger, AverageMeter, timeSince
-from utils.utils import roc_auc_compute_fn
-from tensorboardX import SummaryWriter
+from utils.utils import logger, remove_logger, AverageMeter, timeSince, roc_auc_compute_fn
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='ARMOR framework')
@@ -45,16 +44,15 @@ def get_args():
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
     # log & checkpoint
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
-    parser.add_argument('--tensorboard_dir', default='./tensorboard/', type=str, metavar='PATH',
-                        help='path to tensorboard')
     parser.add_argument('--report_freq', type=int, default=30, help='report frequency')
     parser.add_argument('--seed', type=int, default=2020, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     return args
 
+
 def main():
-    global best_auc, start_time
+    global best_valid_auc, start_time
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     plogger.info(vars(args))
 
@@ -74,21 +72,24 @@ def main():
 
         # train and eval
         run(epoch, model, train_loader, opt_metric, plogger, optimizer=optimizer)
-        auc_val = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
-        auc_test = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
+        valid_auc = run(epoch, model, val_loader, opt_metric, plogger, namespace='val')
+        test_auc = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
 
         # record best aue and save checkpoint
-        if auc_val >= best_auc:
-            best_auc = auc_val
-            plogger.info(f'best auc: valid {auc_val:.4f}, test {auc_test:.4f}')
+        if valid_auc >= best_valid_auc:
+            best_valid_auc, best_test_auc = valid_auc, test_auc
+            plogger.info(f'best valid auc: valid {valid_auc:.4f}, test {test_auc:.4f}')
         else:
             patience_cnt += 1
-            plogger.info(f'valid {auc_val:.4f}, test {auc_test:.4f}')
+            plogger.info(f'valid {valid_auc:.4f}, test {test_auc:.4f}')
             plogger.info(f'Early stopped, {patience_cnt}-th best auc at epoch {epoch-1}')
-        if patience_cnt >= args.patience: break
+        if patience_cnt >= args.patience:
+            plogger.info(f'Final best valid auc {best_valid_auc:.4f}, with test auc {best_test_auc:.4f}')
+            break
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
     remove_logger(plogger)
+
 
 #  train one epoch of train/val/test
 def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespace='train'):
@@ -122,10 +123,6 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
         loss_avg.update(loss.item(), target.size(0))
         auc_avg.update(auc, target.size(0))
 
-        # tensorboardX
-        writer.add_scalar(f'{namespace}/auc-step', auc_avg.val, idx+len(data_loader)*epoch)
-        writer.add_scalar(f'{namespace}/loss-step', loss_avg.val, idx+len(data_loader)*epoch)
-
         time_avg.update(time.time() - timestamp)
         timestamp = time.time()
         if idx % args.report_freq == 0:
@@ -139,19 +136,16 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
 
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\t'
                  f'AUC {auc_avg.avg:8.4f}\tLoss {loss_avg.avg:8.4f}')
-    writer.add_scalar(f'{namespace}/auc-epoch', auc_avg.avg, epoch)
-    writer.add_scalar(f'{namespace}/loss-epoch', loss_avg.avg, epoch)
-    writer.flush()
     return auc_avg.avg
+
 
 # init global variables, load dataset
 args = get_args()
 train_loader, val_loader, test_loader = libsvm_dataloader(args)
-start_time, best_auc, base_exp_name = time.time(), 0., args.exp_name
+start_time, best_valid_auc, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
     if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
-    writer = SummaryWriter(f'{os.path.expanduser(args.tensorboard_dir)}{args.exp_name}/')
     main()
-    start_time, best_auc = time.time(), 0.
+    start_time, best_valid_auc = time.time(), 0.

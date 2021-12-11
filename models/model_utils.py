@@ -45,8 +45,8 @@ def create_model(args, logger):
         model = ARMNetModel(args.nfield, args.nfeat, args.nemb, args.nattn_head, args.alpha, args.h,
                     args.nlayer, args.mlp_hid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
     elif args.model == 'armnet_1h':
-        model = ARMNet1H(args.nfield, args.nfeat, args.nemb, args.nattn_head, args.alpha, args.h,
-                         args.nlayer, args.mlp_hid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+        model = ARMNet1H(args.nfield, args.nfeat, args.nemb, args.alpha, args.h, args.k, args.nlayer, args.mlp_hid,
+                         args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
 
     elif args.model == 'dnn':
         model = DNNModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
