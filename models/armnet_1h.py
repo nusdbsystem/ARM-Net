@@ -35,7 +35,10 @@ class SparseAttention(nn.Module):
 
 
 class ARMNetModel(nn.Module):
-    """ Model:  Adaptive Relation Modeling Network (w/ shared bilinear weight => One-Head) """
+    """
+        Model:  Adaptive Relation Modeling Network (w/ shared bilinear weight => One-Head)
+        Important Hyper-Params: alpha (sparsity), nhid (exponential neurons)
+    """
     def __init__(self, nfield: int, nfeat: int, nemb: int, alpha: float, nhid: int, d_k: int,
                  mlp_layers: int, mlp_hid: int, dropout: float, ensemble: bool,
                  deep_layers: int, deep_hid: int, noutput: int = 1):
@@ -57,7 +60,6 @@ class ARMNetModel(nn.Module):
         super().__init__()
         # embedding
         self.embedding = Embedding(nfeat, nemb)
-        self.emb_bn = nn.BatchNorm1d(nfield)
         # arm
         self.attn_layer = SparseAttention(nfield, d_k, nhid, nemb, alpha)
         self.arm_bn = nn.BatchNorm1d(nhid)
@@ -78,7 +80,6 @@ class ARMNetModel(nn.Module):
         """
         x['vals'].clamp_(1e-3, 1.)
         x_arm = self.embedding(x)                                       # bsz*nfield*nemb
-        x_arm = self.emb_bn(x_arm)                                      # bsz*nfield*nemb
 
         arm_weight = self.attn_layer(x_arm)                             # bsz*nhid*nfield
         x_arm = self.arm_bn(torch.exp(

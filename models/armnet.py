@@ -37,7 +37,10 @@ class SparseAttLayer(nn.Module):
 
 
 class ARMNetModel(nn.Module):
-    """ Model:  Adaptive Relation Modeling Network (Multi-Head) """
+    """
+        Model:  Adaptive Relation Modeling Network (Multi-Head)
+        Important Hyper-Params: alpha (sparsity), nhead (attention heads), nhid (exponential neurons)
+    """
     def __init__(self, nfield: int, nfeat: int, nemb: int, nhead: int, alpha: float, nhid: int,
                  mlp_layers: int, mlp_hid: int, dropout: float, ensemble: bool,
                  deep_layers: int, deep_hid: int, noutput: int = 1):
