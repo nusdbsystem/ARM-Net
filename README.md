@@ -28,14 +28,28 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 > * The main results on these large benchmark datasets are summarized below.
 > * ARM-Net achieves the overall best performance.
 > * More results and technical details can be found in the [paper](https://dl.acm.org/doi/10.1145/3448016.3457321).
-> * Note that all the results are reported with a *fixed embedding size* of **10** for a fair comparison (higher AUC can be obtained by increasing the embedding size). 
+> * Note that all the results are reported with a *fixed embedding size* of **10** for a fair comparison, and higher AUC can be obtained by increasing the embedding size. 
+
+```sh
+E.g., with a larger embedding size of 100, ARM-Net (single head, without ensemble with a DNN) can obtain 0.9817 AUC on Frappe with only 10 exponential neurons.
+
+CUDA_VISIBLE_DEVICES=0 python train.py --model armnet_1h --nemb 100 --h  10 --alpha 1.7 --lr 0.001 --exp_name frappe_armnet_1h_nemb --repeat 5
+
+AUC and Model Size of this ARM-Net of different embedding sizes are compared below. 
+```
+| Embedding Size | 10  | 20  | 30  | 40  |  50  | 60  | 70  | 80  | 90  |  **100**   | 110  | 120  |
+|:--------------:|:---:|:---:|:---:|:---:|:----:|:---:|:---:|:---:|:---:|:----------:|:---:|:---:|
+|      AUC       | 0.9777  | 0.9779  | 0.9801  | 0.9803  | 0.9798  | 0.9807  | 0.9808  | 0.9810  | 0.9810  | **0.9817** | 0.9811  | 0.9805  |
+|   Model Size   | 177K  | 262K  | 348K  | 434K  | 520K  | 606K  | 692K  | 779K  | 866K  |  **953K**  | 1.04M |  1.13M  |
+
+
 
 <img src="https://user-images.githubusercontent.com/14588544/139670215-77544a4b-5bec-4ede-9b58-1ac1a24ff4cd.png" width="660" />
 
 
 ### ARM-Net for Small to Medium Tabular Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
 
-> * We also implement and evaluate prior arts, latest models and our ARM-Net on the [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
+> * We also implement and evaluate prior arts, latest models and our ARM-Net on [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
 > 
 > * **Models** and **Utilities** for evaluating models on [121 UCI Datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf) are included in this [repository](https://github.com/nusdbsystem/ARM-Net/tree/uci).
 > 
@@ -63,8 +77,8 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 ### ARM-Net for [Log-Based Anomaly Detection](https://arxiv.org/abs/2107.05908)
 
 > * ARM-Net can also be readily adapted for supporting Log-based Anomaly Detection, which is to detect anomalies given a sequence of history log events.
-> * Each log event consists of tabular data (a fixed number of features) and raw text (a sequence of language tokens).
-> * **Models** and **Utilities** for ARM-Net supporting End-to-end Log-based Anomaly Detection can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/log).
+> * Each log event consists of tabular data (a fixed number of features) and raw text (a token sequence).
+> * **Models** and **Utilities** for supporting End-to-end Log-based Anomaly Detection can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/log).
 
 
 
@@ -99,5 +113,5 @@ S. Cai, K. Zheng, G. Chen, H.V. Jagadish, B.C. Ooi, M. Zhang. ARM-Net: Adaptive 
 ```
 
 ### Contact
-To ask questions or report issues, you can directly drop us an [email](mailto:shaofeng@comp.nus.edu.sg).
+To ask questions or report issues, you can drop us an [email](mailto:shaofeng@comp.nus.edu.sg).
 
