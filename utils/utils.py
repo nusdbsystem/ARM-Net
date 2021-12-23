@@ -6,6 +6,7 @@ import logging
 import sys
 import shutil
 from typing import Tuple
+from torch import FloatTensor, LongTensor
 
 
 # setup logger
@@ -88,14 +89,14 @@ def roc_auc_compute_fn(y_pred, y_target):
         return 0.
 
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(y_pred, y_target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
-    batch_size = target.size(0)
+    batch_size = y_target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
+    _, pred = y_pred.topk(maxk, 1, True, True)
     pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+    correct = pred.eq(y_target.view(1, -1).expand_as(pred))
 
     res = []
     for k in topk:
@@ -105,20 +106,47 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 
-def f1_score(y_target: torch.Tensor, y_pred: torch.Tensor, epsilon: float = 1e-7) -> Tuple[int, int, int]:
+def is_in_topk(y_pred: FloatTensor, y_target: LongTensor, topk: int) -> LongTensor:
+    """
+    :param y_pred:      [bsz, nclass], FloatTensor
+    :param y_target:    [bsz], LongTensor
+    :param topk:        top_k accuracy
+    :return:            [bsz], LongTensor, whether targets lie in top_k predictions
+    """
+    assert topk <= y_pred.size(1), f'top_k {topk} larger than nclass {y_pred.size(1)} !'
+    _, pred = y_pred.topk(topk, 1, True, True)                  # bsz*topk
+    pred = pred.t()                                             # topk*bsz
+    correct = pred.eq(y_target.view(1, -1).expand_as(pred))     # topk_bsz
+    return correct.sum(dim=0)                                   # bsz
+
+
+def is_log_seq_anomaly(event_acc: LongTensor, nsamples: LongTensor) -> LongTensor:
     '''
-    :param y_target:    true label, ndim==1
+    :param event_acc:   [N], LongTensor
+    :param nsamples:    [bsz], LongTensor
+    :return:            [bsz], LongTensor, whether log seq is anomaly
+    '''
+    pos, bsz = 0, nsamples.size(0)
+    log_acc = torch.zeros(bsz).long()                       # bsz
+    for log_idx in range(bsz):
+        log_pred = event_acc[pos: pos+nsamples[log_idx]]    # n_i
+        if log_pred.size(0) != log_pred.sum():
+            log_acc[log_idx] = 1
+        pos += nsamples[log_idx].item()
+    return log_acc
+
+
+def f1_score(y_pred: torch.Tensor, y_target: torch.Tensor, epsilon: float = 1e-7) -> Tuple[float, float, float]:
+    '''
     :param y_pred:      prediction label, ndim 1 or 2 (label or logits)
+    :param y_target:    true label, ndim==1
     :param epsilon:     for numerical stability
     :return:            precision, recall and f1_score
     For Binary Clasification, can work with gpu tensors
     Reference: https://gist.github.com/SuperShinyEyes/dcc68a08ff8b615442e3bc6a9b55a354
     '''
-    assert y_target.ndim == 1
-    assert y_pred.ndim == 1 or y_pred.ndim == 2
-
-    if y_pred.ndim == 2:
-        y_pred = y_pred.argmax(dim=1)
+    assert y_target.ndim == 1 and (y_pred.ndim == 1 or y_pred.ndim == 2)
+    if y_pred.ndim == 2: y_pred = y_pred.argmax(dim=1)
 
     tp = (y_target * y_pred).sum().to(torch.float32)
     tn = ((1 - y_target) * (1 - y_pred)).sum().to(torch.float32)

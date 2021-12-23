@@ -11,63 +11,58 @@ from torch import optim
 from data_loader import log_loader, get_vocab_size
 from models.log_seq_encoder import LogSeqEncoder
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
-from utils.utils import f1_score
+from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly
 
 def get_args():
-    parser = argparse.ArgumentParser(description='ARMOR framework')
+    parser = argparse.ArgumentParser(description='Log-Based Anomaly Detection')
     parser.add_argument('--exp_name', default='test', type=str, help='exp name for log & checkpoint')
     # model config
     parser.add_argument('--nstep', type=int, default=10, help='number of log events per sequence')
-    parser.add_argument('--tabular_cap', type=int, default=1000, help='feature cap for tabular data')
-    parser.add_argument('--text_cap', type=int, default=5000, help='feature cap for text')
+    parser.add_argument('--tabular_cap', type=int, default=1000, help='feature cap for tabular data, e.g., pid in HDFS')
     ## tabular
-    parser.add_argument('--nemb', type=int, default=32, help='tabular embedding size')
+    parser.add_argument('--nemb', type=int, default=20, help='tabular embedding size')
     parser.add_argument('--alpha', default=1.7, type=float, help='entmax alpha to control sparsity in ARM-Module')
-    parser.add_argument('--nhid', type=int, default=256, help='number of cross features in ARM-Module')
-    parser.add_argument('--d_hid', type=int, default=512, help='inner Query/Key dimension in ARM-Module')
-    ## text
-    parser.add_argument('--max_seq_len', type=int, default=500, help='max text sequence length')
-    parser.add_argument('--d_model', type=int, default=128, help='text token embedding size')
-    parser.add_argument('--nhead', type=int, default=8, help='attention head per layer')
-    parser.add_argument('--num_layers', type=int, default=6, help='number of layers for text encoder')
-    parser.add_argument('--dim_feedforward', type=int, default=2048, help='FFN dimension for Text Encoder')
+    parser.add_argument('--nhid', type=int, default=64, help='# (exponential neurons) cross features in ARM-Module')
+    parser.add_argument('--nquery', type=int, default=8, help='number of output query vectors for each step')
+    ## log sequence
+    parser.add_argument('--nhead', type=int, default=8, help='attention head per layer for log seq encoder')
+    parser.add_argument('--num_layers', type=int, default=2, help='number of layers for log seq encoder')
+    parser.add_argument('--dim_feedforward', type=int, default=256, help='FFN dimension for log seq encoder')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout rate for text encoder and predictor')
-    ## tcn
-    parser.add_argument('--tcn_layers', type=int, default=3, help='number of TCN layers for tabular & text')
     ## predictor
     parser.add_argument('--predictor_layers', type=int, default=2, help='number of layers for predictor')
-    parser.add_argument('--d_predictor', type=int, default=512, help='FFN dimension for predictor')
-
+    parser.add_argument('--d_predictor', type=int, default=256, help='FFN dimension for predictor')
     # optimizer
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
     parser.add_argument('--patience', type=int, default=1, help='number of epochs for early stopping training')
-    parser.add_argument('--batch_size', type=int, default=96, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size')
     parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
-    parser.add_argument('--dataset', type=str, default='bgl', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/BGL/encode.log', help='path to dataset')
-    parser.add_argument('--valid_perc', default=0.1, type=float, help='validation set percentage')
-    parser.add_argument('--test_perc', default=0.1, type=float, help='test set percentage')
+    parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
+    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode.log', help='dataset path')
+    # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
+    parser.add_argument('--valid_perc', default=0.2, type=float, help='validation set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
+    # evaluation metric
+    parser.add_argument('--topk', default=10, type=float, help='number of top candidate events for anomaly detection')
     # log & checkpoint
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
-    parser.add_argument('--tensorboard_dir', default='./tensorboard/', type=str, metavar='PATH',
-                        help='path to tensorboard')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2021, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     return args
 
+
 def main():
-    global args, best_valid_f1, start_time, ret_vocab_sizes
+    global args, best_valid_f1, start_time, vocab_sizes
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     plogger.info(vars(args))
 
-    model = LogSeqEncoder(args.nstep, args.nfield, ret_vocab_sizes[0], args.nemb, args.alpha, args.nhid, args.d_hid,
-                          args.d_model, ret_vocab_sizes[1], ret_vocab_sizes[1]-1, args.nhead, args.num_layers,
-                          args.dim_feedforward, args.dropout, args.tcn_layers, args.predictor_layers, args.d_predictor)
+    model = LogSeqEncoder(args.nstep, len(vocab_sizes), sum(vocab_sizes).item(), args.nemb, args.alpha, args.nhid,
+                          args.nquery, args.nhead, args.num_layers, args.dim_feedforward, args.dropout,
+                          args.predictor_layers, args.d_predictor, vocab_sizes[-1])
     model = torch.nn.DataParallel(model).cuda()
     plogger.info(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
 
@@ -77,8 +72,8 @@ def main():
     # gradient clipping
     for p in model.parameters():
         p.register_hook(lambda grad: torch.clamp(grad, -1., 1.))
-
     cudnn.benchmark = True
+
     patience_cnt = 0
     for epoch in range(args.epoch):
         plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}]')
@@ -96,47 +91,59 @@ def main():
         else:
             patience_cnt += 1
             plogger.info(f'valid {valid_f1:.4f}, test {test_f1:.4f}')
-            plogger.info(f'Early stopped, {patience_cnt}-th best auc at epoch {epoch-1}')
+            plogger.info(f'Early stopped, {patience_cnt}-th best f1 at epoch {epoch-1}')
         if patience_cnt >= args.patience:
-            plogger.info(f'Final best valid auc {best_valid_f1:.4f}, with test auc {best_test_f1:.4f}')
+            plogger.info(f'Final best valid f1 {best_valid_f1:.4f}, with test f1 {best_test_f1:.4f}')
             break
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
     remove_logger(plogger)
 
+
 #  train one epoch of train/val/test
-def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespace='train') -> Tuple[int, int, int]:
-    if optimizer: model.train()
+def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespace='train') \
+        -> Tuple[float, float, float]:
+    if namespace == 'train': model.train()
     else: model.eval()
 
-    time_avg = AverageMeter()
-    loss_avg, precision_avg = AverageMeter(), AverageMeter()
-    recall_avg, f1_avg = AverageMeter(), AverageMeter()
+    time_avg, loss_avg = AverageMeter(), AverageMeter()
+    precision_avg, recall_avg, f1_avg = AverageMeter(), AverageMeter(), AverageMeter()
 
     timestamp = time.time()
     for idx, batch in enumerate(data_loader):
-        target = batch['y'].cuda(non_blocking=True).long()
-        tabular = batch['tabular'].cuda(non_blocking=True)
-        text = batch['text'].cuda(non_blocking=True)
+        tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
+        eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
+        nsamples = batch['nsamples']                                            # bsz
+        log_seq_y = batch['log_seq_y']                                          # bsz
 
-        if optimizer:
-            y = model(tabular, text)
-            loss = opt_metric(y, target)
+        if namespace == 'train':
+            pred_eventID_y = model(tabular)                                     # N*noutput
+            loss = opt_metric(pred_eventID_y, eventID_y)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         else:
             with torch.no_grad():
-                y = model(tabular, text)
-                loss = opt_metric(y, target)
+                pred_eventID_y = model(tabular)
+                loss = opt_metric(pred_eventID_y, eventID_y)
 
-        precision, recall, f1 = f1_score(target, y)
-        loss_avg.update(loss.item(), target.size(0))
-        precision_avg.update(precision, target.size(0))
-        recall_avg.update(recall, target.size(0))
-        f1_avg.update(f1, target.size(0))
+        global args
 
+        if namespace == 'train':
+            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # bsz
+            # calc training event prediction accuracy, record in precision_avg
+            batch_acc = event_acc.sum().float().item() * 100./event_acc.size(0)
+            precision_avg.update(batch_acc, event_acc.size(0))
+        else:
+            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # bsz
+            log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
+            precision, recall, f1 = f1_score(log_pred, log_seq_y)
+            precision_avg.update(precision, eventID_y.size(0))
+            recall_avg.update(recall, eventID_y.size(0))
+            f1_avg.update(f1, eventID_y.size(0))
+
+        loss_avg.update(loss.item(), eventID_y.size(0))
         time_avg.update(time.time() - timestamp)
         timestamp = time.time()
         if idx % args.report_freq == 0:
@@ -155,18 +162,17 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
                  f'F1-score {f1_avg.avg:4f}\tLoss {loss_avg.avg:8.4f}')
     return precision_avg.avg, recall_avg.avg, f1_avg.avg
 
+
 # initialize global variables, load dataset
 args = get_args()
-vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap, args.text_cap)
-args.nfield = len(vocab_sizes)-1
-train_loader, val_loader, \
-test_loader, ret_vocab_sizes = log_loader(args.data_path, args.nstep, vocab_sizes,
-                                      args.max_seq_len, args.batch_size, args.valid_perc,
-                                      args.test_perc, args.workers)
+vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
+train_loader, val_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes,
+                                                   args.batch_size, args.valid_perc, args.workers)
 start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
-    if not os.path.isdir(f'log/{args.exp_name}'): os.makedirs(f'log/{args.exp_name}', exist_ok=True)
+    if not os.path.isdir(f'{args.log_dir}{args.exp_name}'):
+        os.makedirs(f'{args.log_dir}{args.exp_name}', exist_ok=True)
     main()
     start_time, best_valid_f1 = time.time(), 0.

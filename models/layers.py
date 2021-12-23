@@ -1,3 +1,4 @@
+import math
 from models.utils import default
 from einops import rearrange
 
@@ -5,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch import einsum
 import torch.nn.functional as F
+
 
 class Attention(nn.Module):
     """" Self-Attention or Cross-Attention """
@@ -45,6 +47,72 @@ class Attention(nn.Module):
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
         return self.to_out(out)
+
+
+class MLP(nn.Module):
+
+    def __init__(self, ninput: int, nlayers: int, nhid: int,
+                 dropout: float = 0., noutput: int = 1):
+        """
+        :param ninput:      dimension of input
+        :param nlayers:     Number of hidden layers
+        :param nhid:        hidden dimension of each layer
+        :param dropout:     dropout rate, default 0.
+        :param noutput:     dimension of output
+        """
+        super().__init__()
+        layers = list()
+        for i in range(nlayers):
+            layers.append(nn.Linear(ninput, nhid))
+            layers.append(nn.BatchNorm1d(nhid))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(p=dropout))
+            ninput = nhid
+        if nlayers==0: nhid = ninput
+        layers.append(nn.Linear(nhid, noutput))
+        self.mlp = nn.Sequential(*layers)
+
+    def forward(self, x):
+        """
+        :param x:   [bsz, ninput], FloatTensor
+        :return:    [bsz, nouput], FloatTensor
+        """
+        return self.mlp(x)
+
+
+class Embeddings(nn.Module):
+    def __init__(self, d_model, vocab, padding_idx):
+        super(Embeddings, self).__init__()
+        self.lut = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
+        self.d_model = d_model
+
+    def forward(self, x):
+        """
+        :param x:       [*]
+        :return:        [*, d_model]
+        """
+        return self.lut(x)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = torch.zeros(max_len, d_model)                                      # [max_len, d_model]
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)     # [max_len, 1]
+        div_term = torch.exp(torch.arange(0, d_model, 2).float()
+                             * (-math.log(10000.0) / d_model))                  # [d_model/2]
+        pe[:, 0::2] = torch.sin(position * div_term)                            # [max_len, d_model/2]
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        :param x:   [*, x_len, d_model], FloatTensor
+        :return:    [*, x_len, d_model], FloatTensor
+        """
+        x = x + self.pe[:x.size(-2), :]                                         # [*, x_len, d_model]
+        return self.dropout(x)
 
 
 class TCN(nn.Module):
@@ -89,34 +157,3 @@ class TCN(nn.Module):
             x += residual                                   # bsz*nemb*seq_len
 
         return x                                            # bsz*nemb*seq_len
-
-
-class MLP(nn.Module):
-
-    def __init__(self, ninput: int, nlayers: int, nhid: int,
-                 dropout: float = 0., noutput: int = 1):
-        """
-        :param ninput:      dimension of input
-        :param nlayers:     Number of hidden layers
-        :param nhid:        hidden dimension of each layer
-        :param dropout:     dropout rate, default 0.
-        :param noutput:     dimension of output
-        """
-        super().__init__()
-        layers = list()
-        for i in range(nlayers):
-            layers.append(nn.Linear(ninput, nhid))
-            layers.append(nn.BatchNorm1d(nhid))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(p=dropout))
-            ninput = nhid
-        if nlayers==0: nhid = ninput
-        layers.append(nn.Linear(nhid, noutput))
-        self.mlp = nn.Sequential(*layers)
-
-    def forward(self, x):
-        """
-        :param x:   [bsz, ninput], FloatTensor
-        :return:    [bsz, nouput], FloatTensor
-        """
-        return self.mlp(x)
