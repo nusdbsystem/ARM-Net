@@ -1,11 +1,18 @@
 import math
-from models.utils import default
 from einops import rearrange
 
 import torch
 import torch.nn as nn
 from torch import einsum
 import torch.nn.functional as F
+
+
+def exists(val):
+    return val is not None
+
+
+def default(val, d):
+    return val if exists(val) else d
 
 
 class Attention(nn.Module):

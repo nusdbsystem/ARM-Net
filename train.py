@@ -12,11 +12,13 @@ from data_loader import log_loader, get_vocab_size
 from models.log_seq_encoder import LogSeqEncoder
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
 from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly
+from models.utils import create_model
 
 def get_args():
     parser = argparse.ArgumentParser(description='Log-Based Anomaly Detection')
     parser.add_argument('--exp_name', default='test', type=str, help='exp name for log & checkpoint')
     # model config
+    parser.add_argument('--model', default='armnet', type=str, help='model name')
     parser.add_argument('--nstep', type=int, default=10, help='number of log events per sequence')
     parser.add_argument('--tabular_cap', type=int, default=1000, help='feature cap for tabular data, e.g., pid in HDFS')
     ## tabular
@@ -26,7 +28,7 @@ def get_args():
     parser.add_argument('--nquery', type=int, default=8, help='number of output query vectors for each step')
     ## log sequence
     parser.add_argument('--nhead', type=int, default=8, help='attention head per layer for log seq encoder')
-    parser.add_argument('--num_layers', type=int, default=2, help='number of layers for log seq encoder')
+    parser.add_argument('--num_layers', type=int, default=6, help='number of layers for log seq encoder')
     parser.add_argument('--dim_feedforward', type=int, default=256, help='FFN dimension for log seq encoder')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout rate for text encoder and predictor')
     ## predictor
@@ -60,12 +62,8 @@ def main():
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     plogger.info(vars(args))
 
-    model = LogSeqEncoder(args.nstep, len(vocab_sizes), sum(vocab_sizes).item(), args.nemb, args.alpha, args.nhid,
-                          args.nquery, args.nhead, args.num_layers, args.dim_feedforward, args.dropout,
-                          args.predictor_layers, args.d_predictor, vocab_sizes[-1])
-    model = torch.nn.DataParallel(model).cuda()
-    plogger.info(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
-
+    # create model
+    model = create_model(args, plogger, vocab_sizes)
     # optimizer
     opt_metric = nn.CrossEntropyLoss().cuda()
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
@@ -131,13 +129,13 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
         global args
 
         if namespace == 'train':
-            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # bsz
+            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
             # calc training event prediction accuracy, record in precision_avg
             batch_acc = event_acc.sum().float().item() * 100./event_acc.size(0)
             precision_avg.update(batch_acc, event_acc.size(0))
         else:
             event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # bsz
-            log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
+            log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # N
             precision, recall, f1 = f1_score(log_pred, log_seq_y)
             precision_avg.update(precision, eventID_y.size(0))
             recall_avg.update(recall, eventID_y.size(0))

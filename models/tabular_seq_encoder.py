@@ -18,7 +18,7 @@ class TabularSeqEncoder(nn.Module):
         # TODO: replace cross-attn with MLP for dim reduction
         # output cross-attn, aggregating info within each step
         self.query = nn.Parameter(torch.randn(nstep, nquery, nemb))
-        self.step_query_attn = Attention(query_dim=nemb, context_dim=nemb)
+        self.step_query_attn = Attention(query_dim=nemb, context_dim=nemb, heads=8, dim_head=nemb)
 
     def forward(self, x: Tensor) -> Tensor:
         """
