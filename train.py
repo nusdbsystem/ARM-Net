@@ -125,38 +125,38 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
                 pred_eventID_y = model(tabular)
                 loss = opt_metric(pred_eventID_y, eventID_y)
 
-        global args
-
-        event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)               # N
-        # calculate event prediction accuracy, record in event_acc_avg
-        batch_acc = event_acc.sum().float().item() * 100. / event_acc.size(0)
         # valid/test, evaluate log seq prediction precision/recall/f1
-        if namespace != 'train':
+        if namespace == 'train':
+            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
+        else:
+            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
             log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # N
             precision, recall, f1 = f1_score(log_pred, log_seq_y)
+
             precision_avg.update(precision, eventID_y.size(0))
             recall_avg.update(recall, eventID_y.size(0))
             f1_avg.update(f1, eventID_y.size(0))
 
         time_avg.update(time.time() - timestamp)
         loss_avg.update(loss.item(), eventID_y.size(0))
+        batch_acc = event_acc.sum().float().item() * 100. / event_acc.size(0)
         event_acc_avg.update(batch_acc, event_acc.size(0))
         timestamp = time.time()
         if idx % args.report_freq == 0:
-            plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}]\t'
-                         f'{time_avg.val:.3f} ({time_avg.avg:.3f})\t'
-                         f'A {event_acc_avg.val:.3f} ({event_acc_avg.avg:.3f})\t'
-                         f'P {precision_avg.val:4f} ({precision_avg.avg:4f})\t'
-                         f'R {recall_avg.val:4f} ({recall_avg.avg:4f})\t'
-                         f'F1 {f1_avg.val:4f} ({f1_avg.avg:4f})\t'
-                         f'Loss {loss_avg.val:8.4f} ({loss_avg.avg:8.4f})')
+            plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}] '
+                         f'{time_avg.val:.3f} ({time_avg.avg:.3f}) '
+                         f'A {event_acc_avg.val:.3f} ({event_acc_avg.avg:.3f}) '
+                         f'P {precision_avg.val:.4f} ({precision_avg.avg:.4f}) '
+                         f'R {recall_avg.val:.4f} ({recall_avg.avg:.4f}) '
+                         f'F1 {f1_avg.val:.4f} ({f1_avg.avg:.4f}) '
+                         f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
         # stop training current epoch for evaluation
         if idx >= args.eval_freq: break
 
-    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\t'
-                 f'Precision {precision_avg.avg:4f}\tRecall {recall_avg.avg:4f}\t'
-                 f'F1-score {f1_avg.avg:4f}\tLoss {loss_avg.avg:8.4f}')
+    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\tAccuracy {event_acc_avg.avg:.4f}\t'
+                 f'Precision {precision_avg.avg:.4f}\tRecall {recall_avg.avg:.4f}\t'
+                 f'F1-score {f1_avg.avg:.4f}\tLoss {loss_avg.avg:8.4f}')
     return precision_avg.avg, recall_avg.avg, f1_avg.avg
 
 
