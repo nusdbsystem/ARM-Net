@@ -12,7 +12,7 @@ class TransformerLogSeqEncoder(nn.Module):
     """ Log Sequence Encoder using Transformer """
     def __init__(self, nstep: int, nfeat: int, nemb: int,
                  nhead: int = 8, num_layers: int = 6, dim_feedforward: int = 2048,
-                 dropout: float = 0.0, predictor_layers: int = 2, d_predictor: int = 256,
+                 dropout: float = 0.0, predictor_nlayer: int = 2, d_predictor: int = 256,
                  noutput: int = 2):
         """
         :param nstep:               Number of time steps
@@ -23,7 +23,7 @@ class TransformerLogSeqEncoder(nn.Module):
         :param num_layers:          Number of layers for Log Seq Encoder
         :param dim_feedforward:     FFN dimension for Log Seq Encoder
         :param dropout:             Dropout rate for Log Seq Encoder and predictor
-        :param predictor_layers:    FFN layers for predictor
+        :param predictor_nlayer:    FFN layers for predictor
         :param d_predictor:         FFN dimension for predictor
         :param noutput:             Number of prediction output for predictor, e.g., nclass
         """
@@ -38,7 +38,7 @@ class TransformerLogSeqEncoder(nn.Module):
         self.log_seq_encoder = TransformerEncoder(encoder_layer, num_layers=num_layers)
         # TODO: using class token for prediction (-> more flexible log seq len during inference)
         # current: mean
-        self.predictor = MLP(nemb, nlayers=predictor_layers, nhid=d_predictor,
+        self.predictor = MLP(nemb, nlayers=predictor_nlayer, nhid=d_predictor,
                              dropout=dropout, noutput=noutput)
 
     def forward(self, tabular_seq: Tensor) -> Tensor:
@@ -47,10 +47,10 @@ class TransformerLogSeqEncoder(nn.Module):
         :return:                [bsz, noutput], FloatTensor
         """
         # use only eventID field for eventID prediction
-        log_seq = tabular_seq[:, :, -1]                             # bsz*nstep
-        log_seq = self.feature_embedding(log_seq)                   # bsz*nstep*nemb
+        log_seq = tabular_seq[:, :, -1]                                 # bsz*nstep
+        log_seq = self.feature_embedding(log_seq)+self.pos_embedding    # bsz*nstep*nemb
 
-        log_seq = self.log_seq_encoder(log_seq)                     # bsz*nstep*nemb
-        log_seq = reduce(log_seq, 'b t e -> b e', 'mean')           # bsz*nemb
-        y = self.predictor(log_seq)                                 # bsz*noutput
+        log_seq = self.log_seq_encoder(log_seq)                         # bsz*nstep*nemb
+        log_seq = reduce(log_seq, 'b t e -> b e', 'mean')               # bsz*nemb
+        y = self.predictor(log_seq)                                     # bsz*noutput
         return y

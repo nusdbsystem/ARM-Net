@@ -9,7 +9,6 @@ import torch.backends.cudnn as cudnn
 from torch import optim
 
 from data_loader import log_loader, get_vocab_size
-from models.log_seq_encoder import LogSeqEncoder
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
 from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly
 from models.utils import create_model
@@ -32,7 +31,7 @@ def get_args():
     parser.add_argument('--dim_feedforward', type=int, default=256, help='FFN dimension for log seq encoder')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout rate for text encoder and predictor')
     ## predictor
-    parser.add_argument('--predictor_layers', type=int, default=2, help='number of layers for predictor')
+    parser.add_argument('--predictor_nlayer', type=int, default=2, help='number of layers for predictor')
     parser.add_argument('--d_predictor', type=int, default=256, help='FFN dimension for predictor')
     # optimizer
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
@@ -42,7 +41,7 @@ def get_args():
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode.log', help='dataset path')
+    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_shuffle.log', help='dataset path')
     # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='validation set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
@@ -104,7 +103,7 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
     if namespace == 'train': model.train()
     else: model.eval()
 
-    time_avg, loss_avg = AverageMeter(), AverageMeter()
+    time_avg, loss_avg, event_acc_avg = AverageMeter(), AverageMeter(), AverageMeter()
     precision_avg, recall_avg, f1_avg = AverageMeter(), AverageMeter(), AverageMeter()
 
     timestamp = time.time()
@@ -128,25 +127,25 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
 
         global args
 
-        if namespace == 'train':
-            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
-            # calc training event prediction accuracy, record in precision_avg
-            batch_acc = event_acc.sum().float().item() * 100./event_acc.size(0)
-            precision_avg.update(batch_acc, event_acc.size(0))
-        else:
-            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # bsz
+        event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)               # N
+        # calculate event prediction accuracy, record in event_acc_avg
+        batch_acc = event_acc.sum().float().item() * 100. / event_acc.size(0)
+        # valid/test, evaluate log seq prediction precision/recall/f1
+        if namespace != 'train':
             log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # N
             precision, recall, f1 = f1_score(log_pred, log_seq_y)
             precision_avg.update(precision, eventID_y.size(0))
             recall_avg.update(recall, eventID_y.size(0))
             f1_avg.update(f1, eventID_y.size(0))
 
-        loss_avg.update(loss.item(), eventID_y.size(0))
         time_avg.update(time.time() - timestamp)
+        loss_avg.update(loss.item(), eventID_y.size(0))
+        event_acc_avg.update(batch_acc, event_acc.size(0))
         timestamp = time.time()
         if idx % args.report_freq == 0:
             plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}]\t'
                          f'{time_avg.val:.3f} ({time_avg.avg:.3f})\t'
+                         f'A {event_acc_avg.val:.3f} ({event_acc_avg.avg:.3f})\t'
                          f'P {precision_avg.val:4f} ({precision_avg.avg:4f})\t'
                          f'R {recall_avg.val:4f} ({recall_avg.avg:4f})\t'
                          f'F1 {f1_avg.val:4f} ({f1_avg.avg:4f})\t'

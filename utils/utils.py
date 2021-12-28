@@ -127,16 +127,16 @@ def is_log_seq_anomaly(event_acc: LongTensor, nsamples: LongTensor) -> LongTenso
     :return:            [bsz], LongTensor, whether log seq is anomaly
     '''
     pos, bsz = 0, nsamples.size(0)
-    log_acc = torch.zeros(bsz).long()                       # bsz
+    log_acc = torch.ones(bsz).long()                        # bsz
     for log_idx in range(bsz):
         log_pred = event_acc[pos: pos+nsamples[log_idx]]    # n_i
-        if log_pred.size(0) != log_pred.sum():
-            log_acc[log_idx] = 1
+        if torch.all(log_pred):
+            log_acc[log_idx] = 0
         pos += nsamples[log_idx].item()
     return log_acc
 
 
-def f1_score(y_pred: torch.Tensor, y_target: torch.Tensor, epsilon: float = 1e-7) -> Tuple[float, float, float]:
+def f1_score(y_pred: LongTensor, y_target: LongTensor, epsilon: float = 1e-7) -> Tuple[float, float, float]:
     '''
     :param y_pred:      prediction label, ndim 1 or 2 (label or logits)
     :param y_target:    true label, ndim==1

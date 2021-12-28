@@ -96,7 +96,7 @@ class LogDataset(Dataset):
         tabular = torch.stack(tabular, dim=0)                                               # N*nstep*nfield
         eventID_y = torch.stack(eventID_y, dim=0)                                           # N
         nsamples = torch.LongTensor(nsamples)                                               # bsz
-        log_seq_y = torch.stack(log_seq_y, dim=0)                                           # bsz
+        log_seq_y = torch.stack(log_seq_y, dim=0).long()                                    # bsz
         return {
             'tabular': tabular,                                                             # N*nstep*nfield
             'eventID_y': eventID_y,                                                         # N
