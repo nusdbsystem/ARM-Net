@@ -120,6 +120,11 @@ def is_in_topk(y_pred: FloatTensor, y_target: LongTensor, topk: int) -> LongTens
     return correct.sum(dim=0)                                   # bsz
 
 
+def correct_to_acc(is_correct: LongTensor) -> float:
+    """ convert prediction correctness into accuracy """
+    return is_correct.sum().float().item() * 100. / is_correct.size(0)
+
+
 def is_log_seq_anomaly(event_acc: LongTensor, nsamples: LongTensor) -> LongTensor:
     '''
     :param event_acc:   [N], LongTensor

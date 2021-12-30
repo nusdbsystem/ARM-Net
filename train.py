@@ -10,7 +10,7 @@ from torch import optim
 
 from data_loader import log_loader, get_vocab_size
 from utils.utils import logger, remove_logger, AverageMeter, timeSince
-from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly
+from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
 from models.utils import create_model
 
 def get_args():
@@ -40,13 +40,14 @@ def get_args():
     parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
+    parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_shuffle.log', help='dataset path')
+    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_shuffle.log', help='path')
     # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='validation set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
     # evaluation metric
-    parser.add_argument('--topk', default=10, type=float, help='number of top candidate events for anomaly detection')
+    parser.add_argument('--topk', default=10, type=int, help='number of top candidate events for anomaly detection')
     # log & checkpoint
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
@@ -103,68 +104,91 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
     if namespace == 'train': model.train()
     else: model.eval()
 
-    time_avg, loss_avg, event_acc_avg = AverageMeter(), AverageMeter(), AverageMeter()
-    precision_avg, recall_avg, f1_avg = AverageMeter(), AverageMeter(), AverageMeter()
-
+    time_avg, loss_avg, accuracy_avg = AverageMeter(), AverageMeter(), AverageMeter()
     timestamp = time.time()
+    precision, recall, f1 = 0., 0., 0.
+    all_pred, all_target = [], []
     for idx, batch in enumerate(data_loader):
-        tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
-        eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
-        nsamples = batch['nsamples']                                            # bsz
-        log_seq_y = batch['log_seq_y']                                          # bsz
+        if args.session_based:
+            event_count = batch['event_count']                                      # bsz*nevent
+            log_seq_y = batch['log_seq_y']                                          # bsz
 
-        if namespace == 'train':
-            pred_eventID_y = model(tabular)                                     # N*noutput
-            loss = opt_metric(pred_eventID_y, eventID_y)
+            if namespace == 'train':
+                log_pred = model(event_count)                                       # bsz*2
+                loss = opt_metric(log_pred, log_seq_y)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            else:
+                with torch.no_grad():
+                    log_pred = model(event_count)                                   # bsz
+                    loss = opt_metric(log_pred, log_seq_y)
+
+            all_pred.append(log_pred)                                               # bsz
+            all_target.append(log_seq_y)                                            # bsz
+
+            loss_avg.update(loss.item(), log_seq_y.size(0))
+            acc = correct_to_acc(is_in_topk(log_pred, log_seq_y, topk=1))           # bsz
+            accuracy_avg.update(acc, log_seq_y.size(0))
         else:
-            with torch.no_grad():
-                pred_eventID_y = model(tabular)
+            tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
+            eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
+            nsamples = batch['nsamples']                                            # bsz
+            log_seq_y = batch['log_seq_y']                                          # bsz
+
+            if namespace == 'train':
+                pred_eventID_y = model(tabular)                                     # N*nevent
                 loss = opt_metric(pred_eventID_y, eventID_y)
 
-        # valid/test, evaluate log seq prediction precision/recall/f1
-        if namespace == 'train':
-            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
-        else:
-            event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
-            log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # N
-            precision, recall, f1 = f1_score(log_pred, log_seq_y)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            else:
+                with torch.no_grad():
+                    pred_eventID_y = model(tabular)
+                    loss = opt_metric(pred_eventID_y, eventID_y)
 
-            precision_avg.update(precision, eventID_y.size(0))
-            recall_avg.update(recall, eventID_y.size(0))
-            f1_avg.update(f1, eventID_y.size(0))
+            # valid/test, evaluate log seq prediction precision/recall/f1
+            if namespace == 'train':
+                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
+            else:
+                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
+                log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
+
+                all_pred.append(log_pred)                                           # bsz
+                all_target.append(log_seq_y)                                        # bsz
+
+            batch_acc = correct_to_acc(event_acc)
+            accuracy_avg.update(batch_acc, event_acc.size(0))
+            loss_avg.update(loss.item(), eventID_y.size(0))
+
+        if args.session_based or namespace != 'train':
+            # calc f1 scores & update stats
+            precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_target))
 
         time_avg.update(time.time() - timestamp)
-        loss_avg.update(loss.item(), eventID_y.size(0))
-        batch_acc = event_acc.sum().float().item() * 100. / event_acc.size(0)
-        event_acc_avg.update(batch_acc, event_acc.size(0))
         timestamp = time.time()
         if idx % args.report_freq == 0:
             plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}] '
                          f'{time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                         f'A {event_acc_avg.val:.3f} ({event_acc_avg.avg:.3f}) '
-                         f'P {precision_avg.val:.4f} ({precision_avg.avg:.4f}) '
-                         f'R {recall_avg.val:.4f} ({recall_avg.avg:.4f}) '
-                         f'F1 {f1_avg.val:.4f} ({f1_avg.avg:.4f}) '
+                         f'A {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
                          f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
         # stop training current epoch for evaluation
         if idx >= args.eval_freq: break
 
-    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\tAccuracy {event_acc_avg.avg:.4f}\t'
-                 f'Precision {precision_avg.avg:.4f}\tRecall {recall_avg.avg:.4f}\t'
-                 f'F1-score {f1_avg.avg:.4f}\tLoss {loss_avg.avg:8.4f}')
-    return precision_avg.avg, recall_avg.avg, f1_avg.avg
+    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\tAccuracy {accuracy_avg.avg:.4f}\t'
+                 f'Precision {precision:.4f}\tRecall {recall:.4f}\t'
+                 f'F1-score {f1:.4f}\tLoss {loss_avg.avg:8.4f}')
+    return precision, recall, f1
 
 
 # initialize global variables, load dataset
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
-train_loader, val_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes,
-                                                   args.batch_size, args.valid_perc, args.workers)
+train_loader, val_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.batch_size,
+                                                   args.valid_perc, args.session_based, args.workers)
 start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)

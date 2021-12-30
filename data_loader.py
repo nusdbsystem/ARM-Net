@@ -2,6 +2,7 @@ from tqdm import tqdm
 import pickle
 import numpy as np
 from typing import Tuple, List, Dict
+from collections import Counter
 
 import torch
 from torch import Tensor, LongTensor, FloatTensor
@@ -27,10 +28,10 @@ def get_vocab_size(dataset: str, tabular_cap: int) -> LongTensor:
 
 
 class LogDataset(Dataset):
-    """ Dataset for Log Data """
-    def __init__(self, data: np.ndarray, nstep: int, vocab_sizes: LongTensor):
-        self.nstep = nstep
-        self.nsample = data.shape[0]
+    """ Dataset for Log Data (EventID in the last Field) """
+    def __init__(self, data: np.ndarray, nstep: int, vocab_sizes: LongTensor, session_based: bool):
+        self.nstep, self.nsample = nstep, data.shape[0]
+        self.session_based, self.event_count = session_based, vocab_sizes[-1]
 
         # sample format: [log_seq: [tabular; eventID]; log_seq_label]
         nfields = vocab_sizes.size(0)
@@ -53,7 +54,6 @@ class LogDataset(Dataset):
                 for field_idx in range(nfields):
                     cap_mask = log_seq[:, field_idx] >= vocab_sizes[field_idx]-1    # n_idx
                     log_seq[cap_mask, field_idx] = vocab_sizes[field_idx]-1
-
                 ## offset
                 log_seq += offsets                                                  # n_idx*nfield
                 self.tabular.append(log_seq)
@@ -75,46 +75,66 @@ class LogDataset(Dataset):
     def generate_batch(self, batch: List[Dict[str, LongTensor]]) -> Dict[str, Tensor]:
         """
         :param batch:   a batch of samples, {tabular: [n_idx, nfield], LongTensor, log_seq_y: 1, LongTensor}
-        :return:        {tabular, eventID_y, nsamples, log_seq_y}
+        :return:        session_based: {event_count, log_event_seq, log_seq_y}
+        :return:        window_based: {tabular, eventID_y, nsamples, log_seq_y}
         """
-        bsz, log_pos = len(batch), 0
-        # number of samples of each log_seq
-        nsamples, log_seq_y = [], []                                                        # bsz
-        tabular, eventID_y = [], []                                                         # N = n_1+n_2+\cdot+n_bsz
-        for log_idx in range(bsz):
-            log_nsample = batch[log_idx]['tabular'].size(0)-self.nstep                      # n_i = n_idx-nstep
-            # drop if log_seq not long enough
-            if log_nsample <= 0: continue
-            else: nsamples.append(log_nsample)
+        bsz = len(batch)
+        # session-based, return only session features
+        if self.session_based:
+            log_seq_y, log_event_seq = [], []                                                   # bsz
+            event_count = torch.zeros((bsz, self.event_count)).long()                           # bsz*nevent
+            for log_idx in range(bsz):
+                # event count
+                event_seq = batch[log_idx]['tabular'][:, -1]                                     # n_idx
+                counter = Counter(event_seq.tolist())
+                for eventID in counter:
+                    event_count[log_idx][eventID] = counter[eventID]
+                # log eventIDs
+                log_event_seq.append(event_seq)                                                 # n_idx
+                # label
+                log_seq_y.append(batch[log_idx]['log_seq_y'])                                   # 1
 
-            log_tabular = batch[log_idx]['tabular']
-            for window_idx in range(log_nsample):
-                tabular.append(log_tabular[window_idx:window_idx+self.nstep])               # nstep*nfield
-                eventID_y.append(log_tabular[window_idx+self.nstep][-1]-self.event_offset)  # 1
-            log_seq_y.append(batch[log_idx]['log_seq_y'])                                   # 1
+            return {
+                'event_count': event_count,                                                     # bsz*nevent
+                'log_event_seq': log_event_seq,                                                 # [n_1, ..., n_bsz]
+                'log_seq_y': torch.stack(log_seq_y, dim=0).long()                               # bsz
+            }
+        # window-based, return both window and session features
+        else:
+            # nsamples: number of samples of each log_seq
+            nsamples, log_seq_y = [], []                                                        # bsz
+            tabular, eventID_y = [], []                                                         # N = n_1+\cdot+n_bsz
+            for log_idx in range(bsz):
+                log_nsample = batch[log_idx]['tabular'].size(0)-self.nstep                      # n_i = n_idx-nstep
+                # drop if log_seq not long enough
+                if log_nsample <= 0: continue
+                # features for all windows
+                nsamples.append(log_nsample)
+                log_tabular = batch[log_idx]['tabular']
+                for window_idx in range(log_nsample):
+                    tabular.append(log_tabular[window_idx:window_idx+self.nstep])               # nstep*nfield
+                    eventID_y.append(log_tabular[window_idx+self.nstep][-1]-self.event_offset)  # 1
+                # session label
+                log_seq_y.append(batch[log_idx]['log_seq_y'])                                   # 1
 
-        tabular = torch.stack(tabular, dim=0)                                               # N*nstep*nfield
-        eventID_y = torch.stack(eventID_y, dim=0)                                           # N
-        nsamples = torch.LongTensor(nsamples)                                               # bsz
-        log_seq_y = torch.stack(log_seq_y, dim=0).long()                                    # bsz
-        return {
-            'tabular': tabular,                                                             # N*nstep*nfield
-            'eventID_y': eventID_y,                                                         # N
-            'nsamples': nsamples,                                                           # bsz
-            'log_seq_y': log_seq_y                                                          # bsz
-        }
+            return {
+                'tabular': torch.stack(tabular, dim=0),                                         # N*nstep*nfield
+                'eventID_y': torch.stack(eventID_y, dim=0),                                     # N
+                'nsamples': torch.LongTensor(nsamples),                                         # bsz
+                'log_seq_y': torch.stack(log_seq_y, dim=0).long()                               # bsz
+            }
 
 
 def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
-            bsz: int, workers: int) -> DataLoader:
-    dataset = LogDataset(data, nstep, vocab_sizes)
+            bsz: int, session_based: bool, workers: int) -> DataLoader:
+    dataset = LogDataset(data, nstep, vocab_sizes, session_based)
     data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True, drop_last=True,
                              num_workers=workers, collate_fn=dataset.generate_batch)
     return data_loader
 
 
-def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int,
-               valid_perc: float = 0.2, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
+def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, valid_perc: float = 0.2,
+               session_based = False, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           number of time steps
@@ -129,8 +149,8 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int,
         test_data = pickle.load(data_file)
 
     valid_samples = int(test_data.shape[0]*valid_perc)
-    train_loader = _loader(train_data, nstep, vocab_sizes, bsz, workers)
-    valid_loader = _loader(test_data[:valid_samples], nstep, vocab_sizes, bsz, workers)
-    test_loader = _loader(test_data[valid_samples:], nstep, vocab_sizes, bsz, workers)
+    train_loader = _loader(train_data, nstep, vocab_sizes, bsz, session_based, workers)
+    valid_loader = _loader(test_data[:valid_samples], nstep, vocab_sizes, bsz, session_based, workers)
+    test_loader = _loader(test_data[valid_samples:], nstep, vocab_sizes, bsz, session_based, workers)
 
     return train_loader, valid_loader, test_loader
