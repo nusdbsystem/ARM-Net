@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--nquery', type=int, default=8, help='number of output query vectors for each step')
     ## log sequence
     parser.add_argument('--nhead', type=int, default=8, help='attention head per layer for log seq encoder')
-    parser.add_argument('--num_layers', type=int, default=6, help='number of layers for log seq encoder')
+    parser.add_argument('--nlayer', type=int, default=6, help='number of layers for log seq encoder')
     parser.add_argument('--dim_feedforward', type=int, default=256, help='FFN dimension for log seq encoder')
     parser.add_argument('--dropout', default=0.1, type=float, help='dropout rate for text encoder and predictor')
     ## predictor
@@ -110,8 +110,8 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
     all_pred, all_target = [], []
     for idx, batch in enumerate(data_loader):
         if args.session_based:
-            event_count = batch['event_count']                                      # bsz*nevent
-            log_seq_y = batch['log_seq_y']                                          # bsz
+            event_count = batch['event_count'].cuda(non_blocking=True)              # bsz*nevent
+            log_seq_y = batch['log_seq_y'].cuda(non_blocking=True)                  # bsz
 
             if namespace == 'train':
                 log_pred = model(event_count)                                       # bsz*2
@@ -163,10 +163,6 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
             accuracy_avg.update(batch_acc, event_acc.size(0))
             loss_avg.update(loss.item(), eventID_y.size(0))
 
-        if args.session_based or namespace != 'train':
-            # calc f1 scores & update stats
-            precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_target))
-
         time_avg.update(time.time() - timestamp)
         timestamp = time.time()
         if idx % args.report_freq == 0:
@@ -178,6 +174,9 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
         # stop training current epoch for evaluation
         if idx >= args.eval_freq: break
 
+    if args.session_based or namespace != 'train':
+        # calc f1 scores & update stats
+        precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_target))
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\tAccuracy {accuracy_avg.avg:.4f}\t'
                  f'Precision {precision:.4f}\tRecall {recall:.4f}\t'
                  f'F1-score {f1:.4f}\tLoss {loss_avg.avg:8.4f}')

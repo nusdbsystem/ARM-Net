@@ -87,20 +87,6 @@ class MLP(nn.Module):
         return self.mlp(x)
 
 
-class Embeddings(nn.Module):
-    def __init__(self, d_model, vocab, padding_idx):
-        super(Embeddings, self).__init__()
-        self.lut = nn.Embedding(vocab, d_model, padding_idx=padding_idx)
-        self.d_model = d_model
-
-    def forward(self, x):
-        """
-        :param x:       [*]
-        :return:        [*, d_model]
-        """
-        return self.lut(x)
-
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()

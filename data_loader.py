@@ -31,7 +31,7 @@ class LogDataset(Dataset):
     """ Dataset for Log Data (EventID in the last Field) """
     def __init__(self, data: np.ndarray, nstep: int, vocab_sizes: LongTensor, session_based: bool):
         self.nstep, self.nsample = nstep, data.shape[0]
-        self.session_based, self.event_count = session_based, vocab_sizes[-1]
+        self.session_based, self.nevent = session_based, vocab_sizes[-1]
 
         # sample format: [log_seq: [tabular; eventID]; log_seq_label]
         nfields = vocab_sizes.size(0)
@@ -82,10 +82,10 @@ class LogDataset(Dataset):
         # session-based, return only session features
         if self.session_based:
             log_seq_y, log_event_seq = [], []                                                   # bsz
-            event_count = torch.zeros((bsz, self.event_count)).long()                           # bsz*nevent
+            event_count = torch.zeros((bsz, self.nevent)).long()                                # bsz*nevent
             for log_idx in range(bsz):
                 # event count
-                event_seq = batch[log_idx]['tabular'][:, -1]                                     # n_idx
+                event_seq = batch[log_idx]['tabular'][:, -1]-self.event_offset                  # n_idx
                 counter = Counter(event_seq.tolist())
                 for eventID in counter:
                     event_count[log_idx][eventID] = counter[eventID]
