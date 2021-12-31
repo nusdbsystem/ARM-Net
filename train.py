@@ -42,7 +42,7 @@ def get_args():
     # dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_shuffle.log', help='path')
+    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_wanomaly.log', help='path')
     # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='validation set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')

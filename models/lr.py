@@ -22,9 +22,9 @@ class Linear(nn.Module):
 
 class LRModel(torch.nn.Module):
     """ Model:  Logistic Regression """
-    def __init__(self, nclass: int, nfeat: int):
+    def __init__(self, nclass: int, nfield: int):
         super().__init__()
-        self.linears = nn.ModuleList(Linear(nfeat) for _ in range(nclass))
+        self.linears = nn.ModuleList(Linear(nfield) for _ in range(nclass))
 
     def forward(self, x):
         """
