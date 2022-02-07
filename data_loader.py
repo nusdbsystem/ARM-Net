@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, LongTensor, FloatTensor
 from torch.utils.data import Dataset, DataLoader
 
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 __HDFS_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 27799, 2, 9, 48])
 __BGL_vocab_sizes__: LongTensor = LongTensor([69251, 24, 60, 60, 100, 6, 14, 10, 648+359228+156004])
@@ -29,11 +30,11 @@ def get_vocab_size(dataset: str, tabular_cap: int) -> LongTensor:
 
 class LogDataset(Dataset):
     """ Dataset for Log Data (EventID in the last Field) """
-    def __init__(self, data: np.ndarray, nstep: int, vocab_sizes: LongTensor, session_based: bool):
-        self.nstep, self.nsample = nstep, data.shape[0]
+    def __init__(self, data: list, nstep: int, vocab_sizes: LongTensor, session_based: bool):
+        self.nstep, self.nsample = nstep, len(data)
         self.session_based, self.nevent = session_based, vocab_sizes[-1]
 
-        # sample format: [log_seq: [tabular; eventID]; log_seq_label]
+        # data sample format: [log_seq: [tabular; eventID]; log_seq_label]
         nfields = vocab_sizes.size(0)
         assert (nfields == len(data[0][0][0])), \
             f"vocab_sizes field {nfields} and data fields {len(data[0][0][0])} not match"
@@ -89,7 +90,7 @@ class LogDataset(Dataset):
                 counter = Counter(event_seq.tolist())
                 for eventID in counter:
                     event_count[log_idx][eventID] = counter[eventID]
-                # log eventIDs
+                # log eventID seq
                 log_event_seq.append(event_seq)                                                 # n_idx
                 # label
                 log_seq_y.append(batch[log_idx]['log_seq_y'])                                   # 1
@@ -133,7 +134,7 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
     return data_loader
 
 
-def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, valid_perc: float = 0.2,
+def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, split_perc: float, valid_perc: float,
                session_based = False, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
@@ -145,12 +146,15 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, va
     :return:                train/valid/test data loader
     """
     with open(data_path, 'rb') as data_file:
-        train_data = pickle.load(data_file)
-        test_data = pickle.load(data_file)
+        data = pickle.load(data_file)
+        embedding_map = pickle.load(data_file)
 
-    valid_samples = int(test_data.shape[0]*valid_perc)
-    train_loader = _loader(train_data, nstep, vocab_sizes, bsz, session_based, workers)
-    valid_loader = _loader(test_data[:valid_samples], nstep, vocab_sizes, bsz, session_based, workers)
-    test_loader = _loader(test_data[valid_samples:], nstep, vocab_sizes, bsz, session_based, workers)
+    train_samples = int(len(data) * split_perc)
+    valid_samples = int(train_samples * valid_perc)
+    train_data, test_data = data[:train_samples], data[train_samples:]
+
+    train_loader = _loader(train_data[:-valid_samples], nstep, vocab_sizes, bsz, session_based, workers)
+    valid_loader = _loader(train_data[-valid_samples:], nstep, vocab_sizes, bsz, session_based, workers)
+    test_loader = _loader(test_data, nstep, vocab_sizes, bsz, session_based, workers)
 
     return train_loader, valid_loader, test_loader

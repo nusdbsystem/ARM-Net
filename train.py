@@ -42,8 +42,9 @@ def get_args():
     # dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_encode_wanomaly.log', help='path')
+    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')
     # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
+    parser.add_argument('--split_perc', default=0.5, type=float, help='train/test data split percentage')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='validation set percentage')
     parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
     # evaluation metric
@@ -52,7 +53,7 @@ def get_args():
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2021, help='seed for reproducibility')
-    parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
+    parser.add_argument('--repeat', type=int, default=5, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     return args
 
@@ -82,7 +83,7 @@ def main():
         test_precidion, test_recall, test_f1 = run(epoch, model, test_loader, opt_metric, plogger, namespace='test')
 
         # record best f1 and save checkpoint
-        if valid_f1 >= best_valid_f1:
+        if valid_f1 > best_valid_f1:
             best_valid_f1 = valid_f1
             best_test_f1 = test_f1
             plogger.info(f'best test: valid {valid_f1:.4f}, test {test_f1:.4f}')
@@ -168,7 +169,7 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
         if idx % args.report_freq == 0:
             plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}][{idx:3d}/{len(data_loader):3d}] '
                          f'{time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                         f'A {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
+                         f'Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
                          f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
         # stop training current epoch for evaluation
@@ -177,9 +178,9 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
     if args.session_based or namespace != 'train':
         # calc f1 scores & update stats
         precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_target))
-    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}\tAccuracy {accuracy_avg.avg:.4f}\t'
-                 f'Precision {precision:.4f}\tRecall {recall:.4f}\t'
-                 f'F1-score {f1:.4f}\tLoss {loss_avg.avg:8.4f}')
+    plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}  Accuracy {accuracy_avg.avg:.4f}  '
+                 f'Precision {precision:.4f}  Recall {recall:.4f}  '
+                 f'F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}')
     return precision, recall, f1
 
 
@@ -187,7 +188,7 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
 train_loader, val_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.batch_size,
-                                                   args.valid_perc, args.session_based, args.workers)
+                                                   args.split_perc, args.valid_perc, args.session_based, args.workers)
 start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
