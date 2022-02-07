@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 from typing import Tuple, List, Dict
 from collections import Counter
+import random
 
 import torch
 from torch import Tensor, LongTensor, FloatTensor
@@ -134,8 +135,8 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
     return data_loader
 
 
-def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, split_perc: float, valid_perc: float,
-               session_based = False, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
+def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, shuffle: bool, split_perc: float,
+               valid_perc: float, session_based = False, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           number of time steps
@@ -147,7 +148,10 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, sp
     """
     with open(data_path, 'rb') as data_file:
         data = pickle.load(data_file)
+        # TODO: use event embedding
         embedding_map = pickle.load(data_file)
+
+    if shuffle: random.shuffle(data)
 
     train_samples = int(len(data) * split_perc)
     valid_samples = int(train_samples * valid_perc)

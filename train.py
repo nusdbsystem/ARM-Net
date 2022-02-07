@@ -41,6 +41,7 @@ def get_args():
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     # dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
+    parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle the whole dataset before split")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
     parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')
     # parser.add_argument('--data_path', type=str, default='./data/Drain_result/small_data.log', help='dataset path')
@@ -187,8 +188,9 @@ def run(epoch, model, data_loader, opt_metric, plogger, optimizer=None, namespac
 # initialize global variables, load dataset
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
-train_loader, val_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.batch_size,
-                                                   args.split_perc, args.valid_perc, args.session_based, args.workers)
+train_loader, val_loader, test_loader = \
+    log_loader(args.data_path, args.nstep, vocab_sizes, args.batch_size, args.shuffle,
+               args.split_perc, args.valid_perc, args.session_based, args.workers)
 start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
