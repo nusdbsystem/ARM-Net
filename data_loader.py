@@ -136,7 +136,7 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
 
 
 def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, shuffle: bool, split_perc: float,
-               valid_perc: float, session_based = False, workers: int = 4) -> Tuple[DataLoader, DataLoader, DataLoader]:
+               nenv: int, session_based = False, workers: int = 4) -> Tuple[List[DataLoader], DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           number of time steps
@@ -154,11 +154,11 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int, sh
     if shuffle: random.shuffle(data)
 
     train_samples = int(len(data) * split_perc)
-    valid_samples = int(train_samples * valid_perc)
     train_data, test_data = data[:train_samples], data[train_samples:]
+    samples_per_env = train_samples // nenv
 
-    train_loader = _loader(train_data[:-valid_samples], nstep, vocab_sizes, bsz, session_based, workers)
-    valid_loader = _loader(train_data[-valid_samples:], nstep, vocab_sizes, bsz, session_based, workers)
+    train_loaders = [_loader(train_data[env_idx*samples_per_env:(env_idx+1)*samples_per_env],
+                             nstep, vocab_sizes, bsz, session_based, workers) for env_idx in range(nenv)]
     test_loader = _loader(test_data, nstep, vocab_sizes, bsz, session_based, workers)
 
-    return train_loader, valid_loader, test_loader
+    return train_loaders, test_loader
