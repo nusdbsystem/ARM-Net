@@ -1,6 +1,4 @@
-from einops.layers.torch import Rearrange
 import torch
-import torch.nn as nn
 from models.layers import MLP
 
 
