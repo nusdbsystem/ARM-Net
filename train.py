@@ -43,7 +43,7 @@ def get_args():
     parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
-    parser.add_argument('--random_type', type=int, default=0, help='data type random type')
+    parser.add_argument('--rand_type', type=int, default=0, help='data type random type')
     # 2.1 irm
     parser.add_argument("--irm", action="store_true", default=False, help="whether to use irm for DG")
     parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM penalty, default 3e-2')
@@ -117,7 +117,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
     timestamp, precision, recall, f1, all_pred, all_target = time.time(), 0., 0., 0., [], []
     if args.irm: dummy_w = IRM.dummy_w.cuda()                                       # 1
 
-    loader = Randomizer.data_generator(data_loaders, args.random_type)
+    loader = Randomizer.data_generator(data_loaders, args.rand_type, max_nbatch=args.eval_freq)
     for env_idx, batch_idx, batch in loader:
         if args.session_based:
             event_count = batch['event_count'].cuda(non_blocking=True)              # bsz*nevent
@@ -189,9 +189,6 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
                          f'[{batch_idx:3d}/{len(data_loaders[env_idx]):3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
                          f'Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
                          f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
-
-        # stop training current epoch for evaluation
-        if batch_idx >= args.eval_freq: break
 
     if args.session_based or namespace != 'train':
         # calc f1 scores & update stats

@@ -13,11 +13,11 @@ class Randomizer():
             yield idx, batch
 
     @staticmethod
-    def data_generator(data_loaders: List[DataLoader], random_type: int, max_batch: int=None) -> Generator:
+    def data_generator(data_loaders: List[DataLoader], random_type: int, max_nbatch: int=None) -> Generator:
         '''
         :param data_loaders:    a list of DataLoaders
         :param random_type:     random type, 0: sequential, 1: sampling batches from random loaders
-        :param max_batch:       optional, maximum number of batches
+        :param max_nbatch:       optional, maximum number of batches
         :return:                a batch generator in format (loader_idx, batch_idx, batch)
         '''
         batch_cnt = 0
@@ -28,7 +28,7 @@ class Randomizer():
                 for batch_idx, batch in loader:
                     yield loader_idx, batch_idx, batch
                     batch_cnt += 1
-                    if max_batch is not None and batch_cnt >= max_batch: return
+                    if max_nbatch is not None and batch_cnt >= max_nbatch: return
         elif random_type == 1:
             while len(data_generators) > 0:
                 loader_idx, loader = random.choice(data_generators)
@@ -36,7 +36,7 @@ class Randomizer():
                     batch_idx, batch = next(loader)
                     yield loader_idx, batch_idx, batch
                     batch_cnt += 1
-                    if max_batch is not None and batch_cnt >= max_batch: return
+                    if max_nbatch is not None and batch_cnt >= max_nbatch: return
                 except StopIteration:
                     data_generators.remove((loader_idx, loader))
         else:
