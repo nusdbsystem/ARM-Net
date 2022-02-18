@@ -7,6 +7,7 @@ class IRM():
     """ IRM utility class """
     dummy_w = torch.nn.Parameter(torch.FloatTensor([1.0]))              # 1
 
+    @staticmethod
     def compute_penalty(losses: FloatTensor, dummy_w: FloatTensor) -> FloatTensor:
         g1 = grad(losses[0::2].mean(), dummy_w, create_graph=True)[0]   # 1
         g2 = grad(losses[1::2].mean(), dummy_w, create_graph=True)[0]   # 1

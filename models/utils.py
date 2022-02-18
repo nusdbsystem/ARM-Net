@@ -5,7 +5,7 @@ from models.lr import LRModel
 from models.dnn import DNNModel
 
 def create_model(args, logger, vocab_sizes):
-    logger.info(f'=> creating model {args.model}')
+    if logger: logger.info(f'=> creating model {args.model}')
     if args.session_based:
         if args.model == 'lr':
             model = LRModel(2, vocab_sizes[-1])
@@ -26,5 +26,5 @@ def create_model(args, logger, vocab_sizes):
             raise ValueError(f'unknown model {args.model}')
 
     model = torch.nn.DataParallel(model).cuda()
-    logger.info(f'{model}\nmodel parameters: {sum([p.data.nelement() for p in model.parameters()])}')
+    if logger: logger.info(f'{model}\nmodel parameters: {sum([p.data.nelement() for p in model.parameters()])}')
     return model

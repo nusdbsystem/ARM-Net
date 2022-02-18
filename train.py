@@ -13,6 +13,8 @@ from utils.utils import logger, remove_logger, AverageMeter, timeSince
 from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
 from models.utils import create_model
 from optimizer.irm import IRM
+from optimizer.randomizer import Randomizer
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Log-Based Anomaly Detection')
@@ -40,7 +42,8 @@ def get_args():
     parser.add_argument('--bsz', type=int, default=256, help='batch size')
     parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
-    parser.add_argument('--nenv', type=int, default=5, help='number of training environments')
+    parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
+    parser.add_argument('--random_type', type=int, default=0, help='data type random type')
     # 2.1 irm
     parser.add_argument("--irm", action="store_true", default=False, help="whether to use irm for DG")
     parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM penalty, default 3e-2')
@@ -89,8 +92,8 @@ def main():
 
         # record best f1 and save checkpoint
         if valid_f1 > best_valid_f1:
-            best_valid_f1 = valid_f1
-            best_test_f1 = test_f1
+            patience_cnt = 0
+            best_valid_f1, best_test_f1 = valid_f1, test_f1
             plogger.info(f'best test: valid {valid_f1:.4f}, test {test_f1:.4f}')
         else:
             patience_cnt += 1
@@ -112,81 +115,83 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 
     time_avg, loss_avg, accuracy_avg = AverageMeter(), AverageMeter(), AverageMeter()
     timestamp, precision, recall, f1, all_pred, all_target = time.time(), 0., 0., 0., [], []
-    if args.irm: dummy_w = IRM.dummy_w.cuda()                                           # 1
-    for env_idx, data_loader in enumerate(data_loaders):
-        for batch_idx, batch in enumerate(data_loader):
-            if args.session_based:
-                event_count = batch['event_count'].cuda(non_blocking=True)              # bsz*nevent
-                log_seq_y = batch['log_seq_y'].cuda(non_blocking=True)                  # bsz
+    if args.irm: dummy_w = IRM.dummy_w.cuda()                                       # 1
 
-                if namespace == 'train':
-                    log_pred = model(event_count)                                       # bsz*2
-                    if args.irm:
-                        losses = opt_metric(log_pred*dummy_w, log_seq_y)                # bsz
-                        # compute penalty
-                        penalty = IRM.compute_penalty(losses, dummy_w)                  # 0
-                    else:
-                        losses = opt_metric(log_pred, log_seq_y)                        # bsz
+    loader = Randomizer.data_generator(data_loaders, args.random_type)
+    for env_idx, batch_idx, batch in loader:
+        if args.session_based:
+            event_count = batch['event_count'].cuda(non_blocking=True)              # bsz*nevent
+            log_seq_y = batch['log_seq_y'].cuda(non_blocking=True)                  # bsz
 
-                    optimizer.zero_grad()
-                    if args.irm: loss = losses.mean() + args.lambda_p*penalty           # 0
-                    else: loss = losses.mean()                                          # 0
-                    loss.backward()
-                    optimizer.step()
+            if namespace == 'train':
+                log_pred = model(event_count)                                       # bsz*2
+                if args.irm:
+                    # inject dummy_w to the loss computation
+                    losses = opt_metric(log_pred*dummy_w, log_seq_y)                # bsz
+                    # compute penalty
+                    penalty = IRM.compute_penalty(losses, dummy_w)                  # 0
                 else:
-                    with torch.no_grad():
-                        log_pred = model(event_count)                                   # bsz
-                        loss = opt_metric(log_pred, log_seq_y).mean()
+                    losses = opt_metric(log_pred, log_seq_y)                        # bsz
 
-                all_pred.append(log_pred)                                               # bsz
-                all_target.append(log_seq_y)                                            # bsz
-
-                loss_avg.update(loss.item(), log_seq_y.size(0))
-                acc = correct_to_acc(is_in_topk(log_pred, log_seq_y, topk=1))           # bsz
-                accuracy_avg.update(acc, log_seq_y.size(0))
-            # TODO: update log-seq based training
+                optimizer.zero_grad()
+                if args.irm: loss = losses.mean() + args.lambda_p*penalty           # 0
+                else: loss = losses.mean()                                          # 0
+                loss.backward()
+                optimizer.step()
             else:
-                tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
-                eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
-                nsamples = batch['nsamples']                                            # bsz
-                log_seq_y = batch['log_seq_y']                                          # bsz
+                with torch.no_grad():
+                    log_pred = model(event_count)                                   # bsz
+                    loss = opt_metric(log_pred, log_seq_y).mean()
 
-                if namespace == 'train':
-                    pred_eventID_y = model(tabular)                                     # N*nevent
+            all_pred.append(log_pred)                                               # bsz
+            all_target.append(log_seq_y)                                            # bsz
+
+            loss_avg.update(loss.item(), log_seq_y.size(0))
+            acc = correct_to_acc(is_in_topk(log_pred, log_seq_y, topk=1))           # bsz
+            accuracy_avg.update(acc, log_seq_y.size(0))
+        # TODO: update log-seq based training
+        else:
+            tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
+            eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
+            nsamples = batch['nsamples']                                            # bsz
+            log_seq_y = batch['log_seq_y']                                          # bsz
+
+            if namespace == 'train':
+                pred_eventID_y = model(tabular)                                     # N*nevent
+                loss = opt_metric(pred_eventID_y, eventID_y).mean()
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            else:
+                with torch.no_grad():
+                    pred_eventID_y = model(tabular)
                     loss = opt_metric(pred_eventID_y, eventID_y).mean()
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-                else:
-                    with torch.no_grad():
-                        pred_eventID_y = model(tabular)
-                        loss = opt_metric(pred_eventID_y, eventID_y).mean()
+            # valid/test, evaluate log seq prediction precision/recall/f1
+            if namespace == 'train':
+                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
+            else:
+                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
+                log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
 
-                # valid/test, evaluate log seq prediction precision/recall/f1
-                if namespace == 'train':
-                    event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
-                else:
-                    event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
-                    log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
+                all_pred.append(log_pred)                                           # bsz
+                all_target.append(log_seq_y)                                        # bsz
 
-                    all_pred.append(log_pred)                                           # bsz
-                    all_target.append(log_seq_y)                                        # bsz
+            batch_acc = correct_to_acc(event_acc)
+            accuracy_avg.update(batch_acc, event_acc.size(0))
+            loss_avg.update(loss.item(), eventID_y.size(0))
 
-                batch_acc = correct_to_acc(event_acc)
-                accuracy_avg.update(batch_acc, event_acc.size(0))
-                loss_avg.update(loss.item(), eventID_y.size(0))
+        time_avg.update(time.time() - timestamp)
+        timestamp = time.time()
+        if batch_idx % args.report_freq == 0:
+            plogger.info(f'Env-{env_idx} Epoch [{epoch:3d}/{args.epoch:3d}]'
+                         f'[{batch_idx:3d}/{len(data_loaders[env_idx]):3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
+                         f'Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
+                         f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
-            time_avg.update(time.time() - timestamp)
-            timestamp = time.time()
-            if batch_idx % args.report_freq == 0:
-                plogger.info(f'Env-{env_idx} Epoch [{epoch:3d}/{args.epoch:3d}]'
-                             f'[{batch_idx:3d}/{len(data_loader):3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                             f'Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
-                             f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
-
-            # stop training current epoch for evaluation
-            if batch_idx >= args.eval_freq: break
+        # stop training current epoch for evaluation
+        if batch_idx >= args.eval_freq: break
 
     if args.session_based or namespace != 'train':
         # calc f1 scores & update stats
