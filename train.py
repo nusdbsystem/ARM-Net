@@ -14,6 +14,7 @@ from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
 from models.utils import create_model
 from optimizer.irm import IRM
 from optimizer.randomizer import Randomizer
+from optimizer.reptile import Reptile
 
 
 def get_args():
@@ -47,6 +48,11 @@ def get_args():
     # 2.1 irm
     parser.add_argument("--irm", action="store_true", default=False, help="whether to use irm for DG")
     parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM penalty, default 3e-2')
+    # 2.2 meta-learning-reptile
+    parser.add_argument("--reptile", action="store_true", default=False, help="whether to use reptile for DG")
+    parser.add_argument('--outer_iter', type=int, default=100, help='number of outer training iterations per epoch')
+    parser.add_argument('--inner_iter', type=int, default=3, help='number of inner training iterations')
+    parser.add_argument('--inner_lr', default=0.0003, type=float, help='inner training learning rate, default 3e-4')
     # 3. dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle the whole dataset before split")
@@ -86,7 +92,10 @@ def main():
         plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}]')
 
         # train and eval - leave-one-domain (env) for validation
-        run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
+        if args.reptile:
+            meta_train(epoch, model, train_loaders, opt_metric, plogger, optimizer)
+        else:
+            run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
         valid_precision, valid_recall, valid_f1 = run(epoch, model, [valid_loader], opt_metric, plogger, namespace='val')
         test_precidion, test_recall, test_f1 = run(epoch, model, [test_loader], opt_metric, plogger, namespace='test')
 
@@ -105,6 +114,27 @@ def main():
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
     remove_logger(plogger)
+
+
+def meta_train(epoch, model, data_loaders, opt_metric, plogger, optimizer):
+    model.train()
+    model_tilde = Reptile.copy_model(model)
+    inner_optimizer = optim.Adam(model_tilde.parameters(), lr=args.inner_lr)
+    time_avg, loss_avg, timestamp = AverageMeter(), AverageMeter(), time.time()
+    for idx in range(args.outer_iter):
+        loss = Reptile.train_steps(args.inner_iter, model_tilde, Randomizer.select_generator(data_loaders),
+                                   opt_metric, inner_optimizer, True)
+        loss_avg.update(loss)
+
+        Reptile.update_grad(model, model_tilde)
+        optimizer.step()
+        optimizer.zero_grad()
+
+        time_avg.update(time.time() - timestamp); timestamp = time.time()
+        if idx % args.report_freq == 0:
+            plogger.info(f'Meta-Train Epoch [{epoch:3d}/{args.epoch:3d}]'
+                         f'[{idx:3d}/{args.outer_iter:3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
+                         f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
 
 #  train one epoch of train/val/test
@@ -151,39 +181,9 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
             accuracy_avg.update(acc, log_seq_y.size(0))
         # TODO: update log-seq based training
         else:
-            tabular = batch['tabular'].cuda(non_blocking=True)                      # N*nstep*nfield
-            eventID_y = batch['eventID_y'].cuda(non_blocking=True)                  # N
-            nsamples = batch['nsamples']                                            # bsz
-            log_seq_y = batch['log_seq_y']                                          # bsz
+            pass
 
-            if namespace == 'train':
-                pred_eventID_y = model(tabular)                                     # N*nevent
-                loss = opt_metric(pred_eventID_y, eventID_y).mean()
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-            else:
-                with torch.no_grad():
-                    pred_eventID_y = model(tabular)
-                    loss = opt_metric(pred_eventID_y, eventID_y).mean()
-
-            # valid/test, evaluate log seq prediction precision/recall/f1
-            if namespace == 'train':
-                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=1)           # N
-            else:
-                event_acc = is_in_topk(pred_eventID_y, eventID_y, topk=args.topk)   # N
-                log_pred = is_log_seq_anomaly(event_acc, nsamples)                  # bsz
-
-                all_pred.append(log_pred)                                           # bsz
-                all_target.append(log_seq_y)                                        # bsz
-
-            batch_acc = correct_to_acc(event_acc)
-            accuracy_avg.update(batch_acc, event_acc.size(0))
-            loss_avg.update(loss.item(), eventID_y.size(0))
-
-        time_avg.update(time.time() - timestamp)
-        timestamp = time.time()
+        time_avg.update(time.time() - timestamp); timestamp = time.time()
         if batch_idx % args.report_freq == 0:
             plogger.info(f'Env-{env_idx} Epoch [{epoch:3d}/{args.epoch:3d}]'
                          f'[{batch_idx:3d}/{len(data_loaders[env_idx]):3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
