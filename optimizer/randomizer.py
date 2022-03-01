@@ -17,7 +17,7 @@ class Randomizer():
         '''
         :param data_loaders:    a list of DataLoaders
         :param random_type:     random type, 0: sequential, 1: sampling batches from random loaders
-        :param max_nbatch:       optional, maximum number of batches
+        :param max_nbatch:      optional, maximum number of batches
         :return:                a batch generator in format (loader_idx, batch_idx, batch)
         '''
         batch_cnt = 0

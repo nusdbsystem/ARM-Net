@@ -45,9 +45,9 @@ def get_args():
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
     parser.add_argument('--rand_type', type=int, default=0, help='data type random type')
+    parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM/Reptile penalty, default 3e-2')
     # 2.1 irm
     parser.add_argument("--irm", action="store_true", default=False, help="whether to use irm for DG")
-    parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM penalty, default 3e-2')
     # 2.2 meta-learning-reptile
     parser.add_argument("--reptile", action="store_true", default=False, help="whether to use reptile for DG")
     parser.add_argument('--outer_iter', type=int, default=100, help='number of outer training iterations per epoch')
@@ -60,7 +60,7 @@ def get_args():
     parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='train/valid data split among train set')
     parser.add_argument('--test_perc', default=0.5, type=float, help='train/test data split perc among all data')
-    parser.add_argument('--workers', default=4, type=int, help='number of data loading workers')
+    parser.add_argument('--workers', default=0, type=int, help='number of data loading workers')
     # 4. evaluation metric
     parser.add_argument('--topk', default=10, type=int, help='number of top candidate events for anomaly detection')
     # 5. log & checkpoint
@@ -91,11 +91,9 @@ def main():
     for epoch in range(args.epoch):
         plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}]')
 
-        # train and eval - leave-one-domain (env) for validation
-        if args.reptile:
-            meta_train(epoch, model, train_loaders, opt_metric, plogger, optimizer)
-        else:
-            run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
+        # train and eval
+        if args.reptile: Reptile.meta_train(args, epoch, model, train_loaders.copy(), opt_metric, plogger, optimizer)
+        else: run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
         valid_precision, valid_recall, valid_f1 = run(epoch, model, [valid_loader], opt_metric, plogger, namespace='val')
         test_precidion, test_recall, test_f1 = run(epoch, model, [test_loader], opt_metric, plogger, namespace='test')
 
@@ -114,28 +112,6 @@ def main():
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
     remove_logger(plogger)
-
-
-def meta_train(epoch, model, data_loaders, opt_metric, plogger, optimizer):
-    model.train()
-    model_tilde = Reptile.copy_model(model)
-    inner_optimizer = optim.Adam(model_tilde.parameters(), lr=args.inner_lr)
-    time_avg, loss_avg, timestamp = AverageMeter(), AverageMeter(), time.time()
-    for idx in range(args.outer_iter):
-        loss = Reptile.train_steps(args.inner_iter, model_tilde, Randomizer.select_generator(data_loaders),
-                                   opt_metric, inner_optimizer, True)
-        loss_avg.update(loss)
-
-        Reptile.update_grad(model, model_tilde)
-        optimizer.step()
-        optimizer.zero_grad()
-
-        time_avg.update(time.time() - timestamp); timestamp = time.time()
-        if idx % args.report_freq == 0:
-            plogger.info(f'Meta-Train Epoch [{epoch:3d}/{args.epoch:3d}]'
-                         f'[{idx:3d}/{args.outer_iter:3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                         f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
-
 
 #  train one epoch of train/val/test
 def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespace='train') \
@@ -194,8 +170,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
         # calc f1 scores & update stats
         precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_target))
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}  Accuracy {accuracy_avg.avg:.4f}  '
-                 f'Precision {precision:.4f}  Recall {recall:.4f}  '
-                 f'F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}')
+                 f'Precision {precision:.4f}  Recall {recall:.4f}  F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}')
     return precision, recall, f1
 
 
@@ -204,11 +179,11 @@ args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
 train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.bsz,
                 args.shuffle, args.valid_perc, args.test_perc, args.nenv, args.session_based, args.workers)
-start_time, best_valid_f1, base_exp_name = time.time(), 0., args.exp_name
+start_time, best_valid_f1, base_exp_name = time.time(), -100., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)
     args.exp_name = f'{base_exp_name}_{args.seed}'
     if not os.path.isdir(f'{args.log_dir}{args.exp_name}'):
         os.makedirs(f'{args.log_dir}{args.exp_name}', exist_ok=True)
     main()
-    start_time, best_valid_f1 = time.time(), 0.
+    start_time, best_valid_f1 = time.time(), -100.

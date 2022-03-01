@@ -8,7 +8,7 @@ import random
 import torch
 from torch import Tensor, LongTensor, FloatTensor
 from torch.utils.data import Dataset, DataLoader
-
+import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 __HDFS_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 27799, 2, 9, 48])
