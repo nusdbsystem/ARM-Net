@@ -41,7 +41,7 @@ def get_args():
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
     parser.add_argument('--patience', type=int, default=1, help='number of epochs for early stopping training')
     parser.add_argument('--bsz', type=int, default=256, help='batch size')
-    parser.add_argument('--lr', default=0.0003, type=float, help='learning rate, default 3e-4')
+    parser.add_argument('--lr', default=3e-4, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
     parser.add_argument('--rand_type', type=int, default=0, help='data type random type')
@@ -52,7 +52,7 @@ def get_args():
     parser.add_argument("--reptile", action="store_true", default=False, help="whether to use reptile for DG")
     parser.add_argument('--outer_iter', type=int, default=100, help='number of outer training iterations per epoch')
     parser.add_argument('--inner_iter', type=int, default=3, help='number of inner training iterations')
-    parser.add_argument('--inner_lr', default=0.0003, type=float, help='inner training learning rate, default 3e-4')
+    parser.add_argument('--inner_lr', default=3e-4, type=float, help='inner training learning rate, default 3e-4')
     # 3. dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle the whole dataset before split")
@@ -60,7 +60,7 @@ def get_args():
     parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='train/valid data split among train set')
     parser.add_argument('--test_perc', default=0.5, type=float, help='train/test data split perc among all data')
-    parser.add_argument('--workers', default=0, type=int, help='number of data loading workers')
+    parser.add_argument('--nworker', default=0, type=int, help='number of data loading workers')
     # 4. evaluation metric
     parser.add_argument('--topk', default=10, type=int, help='number of top candidate events for anomaly detection')
     # 5. log & checkpoint
@@ -161,9 +161,8 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 
         time_avg.update(time.time() - timestamp); timestamp = time.time()
         if batch_idx % args.report_freq == 0:
-            plogger.info(f'Env-{env_idx} Epoch [{epoch:3d}/{args.epoch:3d}]'
-                         f'[{batch_idx:3d}/{len(data_loaders[env_idx]):3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                         f'Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
+            plogger.info(f'Env-{env_idx} Epoch [{epoch:3d}/{args.epoch}][{batch_idx:3d}/{len(data_loaders[env_idx])}] '
+                         f'{time_avg.val:.3f} ({time_avg.avg:.3f}) Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
                          f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
     if args.session_based or namespace != 'train':
@@ -178,7 +177,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
 train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.bsz,
-                args.shuffle, args.valid_perc, args.test_perc, args.nenv, args.session_based, args.workers)
+                args.shuffle, args.valid_perc, args.test_perc, args.nenv, args.session_based, args.nworker)
 start_time, best_valid_f1, base_exp_name = time.time(), -100., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     torch.manual_seed(args.seed)

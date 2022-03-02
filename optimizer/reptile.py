@@ -1,5 +1,4 @@
 import copy
-import logging
 import random
 from typing import Generator
 import time
@@ -26,6 +25,7 @@ class Reptile():
 
     @staticmethod
     def copy_model(model: Module) -> Module:
+        # copy all modules with the same weights (w/o. weight.grad)
         return copy.deepcopy(model)
 
     @staticmethod
@@ -57,41 +57,36 @@ class Reptile():
         model.train()
         time_avg, loss_avg, timestamp = AverageMeter(), AverageMeter(), time.time()
         # init data/meta loaders
-        data_loaders, meta_loaders = loaders, loaders
         # TODO: data/meta loader split type: same/separate-(random/fixed)
+        # data_loaders, meta_loaders = loaders, loaders
         # random.shuffle(loaders)
-        # data_loaders, meta_loaders = loaders[:len(loaders)//2], loaders[len(loaders)//2:]
-        data_loader = Randomizer.data_generator(data_loaders, args.rand_type, max_nbatch=args.eval_freq)
+        data_loaders, meta_loaders = loaders[:len(loaders)//2], loaders[len(loaders)//2:]
         for idx in range(args.outer_iter):
-            try:
-                # 0. init status -> optimizer, model copy for meta-train
-                optimizer.zero_grad()
-                model_tilde = Reptile.copy_model(model)
-                # TODO: check grad = 0 here
-                # 1. data_train_step -> data grad
-                env_idx, batch_idx, batch = next(data_loader)
-                if args.session_based:
-                    event_count = batch['event_count'].cuda(non_blocking=True)  # bsz*nevent
-                    log_seq_y = batch['log_seq_y'].cuda(non_blocking=True)  # bsz
-                    log_pred = model(event_count)  # bsz*2
-                    data_loss = opt_metric(log_pred, log_seq_y).mean()  # 1
-                    data_loss.backward()
-                else:
-                    raise ValueError(f'not implemented yet')
-                # 2. meta_train_step -> meta grad
-                # init inner optimizer
-                inner_optimizer = optim.Adam(model_tilde.parameters(), lr=args.inner_lr)
-                loss = Reptile.train_nstep(args.inner_iter, model_tilde, Randomizer.select_generator(meta_loaders),
-                                           opt_metric, inner_optimizer, True)
-                Reptile.update_grad(model, model_tilde, args.lambda_p)
-                # 3. update
-                optimizer.step()
+            # 0. init status -> optimizer, model copy for meta-train
+            optimizer.zero_grad()
+            model_tilde = Reptile.copy_model(model)
+            # 1. data_train_step -> data grad
+            env_idx, loader = Randomizer.select_generator(data_loaders)
+            batch_idx, batch = next(loader)
+            if args.session_based:
+                event_count = batch['event_count'].cuda(non_blocking=True)  # bsz*nevent
+                log_seq_y = batch['log_seq_y'].cuda(non_blocking=True)      # bsz
+                log_pred = model(event_count)                               # bsz*2
+                data_loss = opt_metric(log_pred, log_seq_y).mean()          # 1
+                data_loss.backward()
+            else:
+                raise ValueError(f'not implemented yet')
+            # 2. meta_train_step -> meta grad
+            # init inner optimizer
+            inner_optimizer = optim.Adam(model_tilde.parameters(), lr=args.inner_lr)
+            loss = Reptile.train_nstep(args.inner_iter, model_tilde, Randomizer.select_generator(meta_loaders)[1],
+                                       opt_metric, inner_optimizer, True)
+            Reptile.update_grad(model, model_tilde, args.lambda_p)
+            # 3. update
+            optimizer.step()
 
-                loss_avg.update(loss + data_loss.item())
-                time_avg.update(time.time() - timestamp); timestamp = time.time()
-                if idx % args.report_freq == 0:
-                    plogger.info(f'Meta-Train Env-{env_idx} Epoch [{epoch:3d}/{args.epoch:3d}]'
-                                 f'[{idx:3d}/{args.outer_iter:3d}] {time_avg.val:.3f} ({time_avg.avg:.3f}) '
-                                 f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
-            except Exception as e:
-                plogger.info(f'exception msg {str(e)}')
+            loss_avg.update(loss + data_loss.item())
+            time_avg.update(time.time() - timestamp); timestamp = time.time()
+            if idx % args.report_freq == 0:
+                plogger.info(f'Meta-Train Env-{env_idx} Epoch [{epoch:3d}/{args.epoch}][{idx:3d}/{args.outer_iter}] '
+                             f'{time_avg.val:.3f} ({time_avg.avg:.3f}) Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')

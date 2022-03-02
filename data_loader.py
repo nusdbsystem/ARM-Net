@@ -8,7 +8,6 @@ import random
 import torch
 from torch import Tensor, LongTensor, FloatTensor
 from torch.utils.data import Dataset, DataLoader
-import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 __HDFS_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 27799, 2, 9, 48])
@@ -128,23 +127,23 @@ class LogDataset(Dataset):
 
 
 def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
-            bsz: int, session_based: bool, workers: int) -> DataLoader:
+            bsz: int, session_based: bool, nworker: int) -> DataLoader:
     dataset = LogDataset(data, nstep, vocab_sizes, session_based)
     data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True, drop_last=True,
-                             num_workers=workers, collate_fn=dataset.generate_batch)
+                             num_workers=nworker, collate_fn=dataset.generate_batch)
     return data_loader
 
 
 def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int,
                shuffle: bool, valid_perc: float, test_perc: float, nenv: int,
-               session_based = False, workers: int = 4) -> Tuple[List[DataLoader], DataLoader, DataLoader]:
+               session_based = False, nworker: int = 4) -> Tuple[List[DataLoader], DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           number of time steps
     :param vocab_sizes:     vocabulary size
     :param bsz:             batch size
     :param valid_perc:      validation percentage
-    :param workers:         number of workers to load data
+    :param nworker:         number of workers to load data
     :return:                train/valid/test data loader
     """
     with open(data_path, 'rb') as data_file:
@@ -157,11 +156,12 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, bsz: int,
     train_samples = int(len(data) * (1-test_perc))
     valid_samples = int(train_samples * valid_perc)
     train_data, test_data = data[:train_samples], data[train_samples:]
-    samples_per_env = (train_samples-valid_samples) // nenv
+    nsample_per_env = (train_samples-valid_samples) // nenv
 
-    train_loaders = [_loader(train_data[env_idx*samples_per_env:(env_idx+1)*samples_per_env],
-                             nstep, vocab_sizes, bsz, session_based, workers) for env_idx in range(nenv)]
-    valid_loader = _loader(train_data[-valid_samples:], nstep, vocab_sizes, bsz, session_based, workers)
-    test_loader = _loader(test_data, nstep, vocab_sizes, bsz, session_based, workers)
+    # split env temporally
+    train_loaders = [_loader(train_data[env_idx*nsample_per_env:(env_idx+1)*nsample_per_env],
+                             nstep, vocab_sizes, bsz, session_based, nworker) for env_idx in range(nenv)]
+    valid_loader = _loader(train_data[-valid_samples:], nstep, vocab_sizes, bsz, session_based, nworker)
+    test_loader = _loader(test_data, nstep, vocab_sizes, bsz, session_based, nworker)
 
     return train_loaders, valid_loader, test_loader

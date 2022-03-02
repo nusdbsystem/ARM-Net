@@ -43,5 +43,6 @@ class Randomizer():
             raise ValueError(f'random type {random_type} not supported!')
 
     @staticmethod
-    def select_generator(data_loaders: List[DataLoader]) -> Generator:
-        return Randomizer.batch_generator(random.choice(data_loaders))
+    def select_generator(data_loaders: List[DataLoader]) -> (int, Generator):
+        loader_idx = random.choice(range(len(data_loaders)))
+        return loader_idx, Randomizer.batch_generator(data_loaders[loader_idx])
