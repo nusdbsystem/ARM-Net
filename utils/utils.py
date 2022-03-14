@@ -6,7 +6,9 @@ import logging
 import sys
 import shutil
 from typing import Tuple
-from torch import FloatTensor, LongTensor
+import random
+import numpy as np
+from torch import FloatTensor, LongTensor, Tensor
 
 
 # setup logger
@@ -141,7 +143,7 @@ def is_log_seq_anomaly(event_acc: LongTensor, nsamples: LongTensor) -> LongTenso
     return log_acc
 
 
-def f1_score(y_pred: LongTensor, y_target: LongTensor, epsilon: float = 1e-7) -> Tuple[float, float, float]:
+def f1_score(y_pred: Tensor, y_target: Tensor, epsilon: float = 1e-7) -> Tuple[float, float, float]:
     '''
     :param y_pred:      prediction label, ndim 1 or 2 (label or logits)
     :param y_target:    true label, ndim==1
@@ -154,7 +156,7 @@ def f1_score(y_pred: LongTensor, y_target: LongTensor, epsilon: float = 1e-7) ->
     if y_pred.ndim == 2: y_pred = y_pred.argmax(dim=1)
 
     tp = (y_target * y_pred).sum().to(torch.float32)
-    tn = ((1 - y_target) * (1 - y_pred)).sum().to(torch.float32)
+    # tn = ((1 - y_target) * (1 - y_pred)).sum().to(torch.float32)
     fp = ((1 - y_target) * y_pred).sum().to(torch.float32)
     fn = (y_target * (1 - y_pred)).sum().to(torch.float32)
 
@@ -178,3 +180,13 @@ def save_checkpoint(ckpt, is_best, file_dir, file_name='model.ckpt'):
     ckpt_name = "{0}{1}".format(file_dir, file_name)
     torch.save(ckpt, ckpt_name)
     if is_best: shutil.copyfile(ckpt_name, "{0}{1}".format(file_dir, 'best_'+file_name))
+
+
+def seed_everything(seed=2022):
+    ''' [reference] https://gist.github.com/KirillVladimirov/005ec7f762293d2321385580d3dbe335 '''
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True

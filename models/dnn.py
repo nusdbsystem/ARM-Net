@@ -8,10 +8,11 @@ class DNNModel(torch.nn.Module):
         super().__init__()
         self.classifier = MLP(nfield, mlp_nlayer, mlp_nhid, dropout, noutput=nclass)
 
-    def forward(self, x):
+    def forward(self, features):
         """
         :param x:   [bsz*nfield], FloatTensor
         :return:    [bsz*nclass], FloatTensor
         """
+        x = features['quantitative']
         if x.dtype != torch.float: x = x.float()
         return self.classifier(x)

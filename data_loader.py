@@ -53,7 +53,7 @@ class LogDataset(Dataset):
         print(f'===>>> processing {self.nsample} logs ...')
         # tabular & label
         self.tabular = []
-        self.y = FloatTensor(self.nsample)                                              # nsample
+        self.y = LongTensor(self.nsample)                                               # nsample
         with tqdm(total=self.nsample) as pbar:
             for sample_idx in range(self.nsample):
                 # tabular
@@ -156,6 +156,17 @@ class LogDataset(Dataset):
             batchfied_features['quantitative'] = torch.stack(quantitative, dim=0)       # bsz/nwindow*nfield
         return batchfied_features
 
+    def cuda(self, batch: Dict[str, Union[Tensor, Dict]]) -> Dict[str, Union[Tensor, Dict]]:
+        """ move all tensors in batch to cuda """
+        if not torch.cuda.is_available(): return batch
+        for feature_key, feature_value in batch['features'].items():
+            batch['features'][feature_key] = feature_value.cuda(non_blocking=True)
+        batch['pred_label'] = batch['pred_label'].cuda(non_blocking=True)
+        if not self.session_based:
+            batch['nsamples'] = batch['nsamples'].cuda(non_blocking=True)
+            batch['label'] = batch['label'].cuda(non_blocking=True)
+        return batch
+
     def generate_batch(self, batch: List[Dict[str, LongTensor]]) -> Dict[str, Union[Tensor, Dict]]:
         """
         :param batch:   a batch of samples, {tabular: [nlog, nfield], LongTensor, y: 1, LongTensor}
@@ -195,7 +206,7 @@ class LogDataset(Dataset):
         if not self.session_based:
             batch['nsamples'] = torch.LongTensor(nsamples)                              # bsz
             batch['label'] = torch.stack(label, dim=0).long()                           # bsz
-        return batch
+        return self.cuda(batch)
 
 def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
             session_based: bool, feature_code: int, bsz: int, nworker: int) -> DataLoader:
@@ -207,7 +218,7 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
 
 def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_based: bool, feature_code: int,
                shuffle: bool, only_normal: bool, valid_perc: float, test_perc: float, nenv: int,
-               bsz: int, nworker: int = 4) -> Tuple[List[DataLoader], DataLoader, DataLoader]:
+               bsz: int, nworker: int) -> Tuple[List[DataLoader], DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           window size (number of window time step)

@@ -26,11 +26,12 @@ class LRModel(torch.nn.Module):
         super().__init__()
         self.linears = nn.ModuleList(Linear(nfield) for _ in range(nclass))
 
-    def forward(self, x):
+    def forward(self, features):
         """
         :param x:   [bsz*nfield], FloatTensor
         :return:    [bsz*nclass], FloatTensor
         """
+        x = features['quantitative']
         if x.dtype != torch.float: x = x.float()
         y = [layer(x) for layer in self.linears]        # [nclass, ...]
         return rearrange(y, 'nclass b -> b nclass')     # bsz*nclass
