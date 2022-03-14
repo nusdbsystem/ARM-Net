@@ -5,7 +5,7 @@ from torch import Tensor
 import torch.nn as nn
 
 from models.layers import MLP
-from models.tabular_seq_encoder import TabularSeqEncoder
+from models.tabSeqEnc import TabularSeqEncoder
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 

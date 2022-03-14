@@ -20,7 +20,7 @@ class Linear(nn.Module):
         return x + self.bias                            # bsz
 
 
-class LRModel(torch.nn.Module):
+class LR(torch.nn.Module):
     """ Model:  Logistic Regression """
     def __init__(self, nclass: int, nfield: int):
         super().__init__()

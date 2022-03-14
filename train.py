@@ -11,7 +11,7 @@ from torch import optim
 from data_loader import log_loader, get_vocab_size
 from utils.utils import logger, remove_logger, AverageMeter, timeSince, seed_everything
 from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
-from models.utils import create_model
+from models.utils import create_model, update_default_config
 from optimizer.irm import IRM
 from optimizer.randomizer import Randomizer
 from optimizer.reptile import Reptile
@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--dropout', default=0.0, type=float, help='dropout rate')
     ## 1.1 tabular
     parser.add_argument('--nemb', type=int, default=20, help='tabular embedding size')
-    parser.add_argument('--nhid', type=int, default=64, help='# (exponential neurons) cross features in ARM-Module')
+    parser.add_argument('--nhid', type=int, default=64, help='number of hidden units')
     # 1.1.1 armnet
     parser.add_argument('--alpha', default=1.7, type=float, help='entmax alpha to control sparsity in ARM-Module')
     parser.add_argument('--nquery', type=int, default=8, help='number of output query vectors for each step')
@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
     parser.add_argument('--patience', type=int, default=1, help='number of epochs for early stopping training')
     parser.add_argument('--bsz', type=int, default=256, help='batch size')
-    parser.add_argument('--lr', default=3, type=float, help='learning rate, default 3e-4')
+    parser.add_argument('--lr', default=3e-4, type=float, help='learning rate, default 3e-4')
     parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
     parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
     parser.add_argument('--rand_type', type=int, default=0, help='data type random type')
@@ -57,7 +57,8 @@ def get_args():
     parser.add_argument('--inner_lr', default=3e-4, type=float, help='inner training learning rate, default 3e-4')
     # 3. dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
-    parser.add_argument('--feature_code', type=int, default=4, help='default, quantitative, see data_loader.LogDataset')
+    parser.add_argument('--feature_code', type=int, default=4, help='1~15, default quantitative, binary feature code'
+            'for [sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1] see data_loader.LogDataset')
     parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle the whole dataset before split")
     parser.add_argument("--only_normal", action="store_true", default=False, help="only train using normal log seq")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
@@ -73,16 +74,17 @@ def get_args():
     parser.add_argument('--seed', type=int, default=2022, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=5, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
+    # update args default arguments
+    update_default_config(args)
     return args
 
 
 def main():
     global args, best_valid_f1, start_time, vocab_sizes
     plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
-    plogger.info(vars(args))
-
     # create model
     model = create_model(args, plogger, vocab_sizes)
+    plogger.info(vars(args))
     # optimizer
     opt_metric = nn.CrossEntropyLoss(reduction='none').cuda()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -171,7 +173,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 
     precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_label))
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}  Accuracy {accuracy_avg.avg:.4f}  '
-                 f'Precision {precision:.4f}  Recall {recall:.4f}  F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}')
+                 f'Precision {precision:.4f}  Recall {recall:.4f}  F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}\n')
     return precision, recall, f1
 
 

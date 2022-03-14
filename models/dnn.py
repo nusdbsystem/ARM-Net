@@ -2,7 +2,7 @@ import torch
 from models.layers import MLP
 
 
-class DNNModel(torch.nn.Module):
+class DNN(torch.nn.Module):
     """ Model:  Deep Neural Networks """
     def __init__(self, nclass: int, nfield: int, mlp_nlayer: int, mlp_nhid: int, dropout: float):
         super().__init__()
