@@ -18,7 +18,7 @@ def sequential_to_quantitative_seq(sequential: LongTensor, nevent: int) -> LongT
         quantitative = torch.zeros((sliding_window.size(0), nevent), dtype=torch.int64)
         for window_idx in range(sliding_window.size(0)):
             counter = Counter(sliding_window[window_idx].tolist())
-            for eventID  in counter:
+            for eventID in counter:
                 quantitative[window_idx][eventID] = counter[eventID]
         return quantitative
 
@@ -34,7 +34,6 @@ class LogAnomaly(torch.nn.Module):
     """
         Model:  LogAnomaly Model (window-based; [sequential, quantative])
         Reference:  https://www.ijcai.org/proceedings/2019/0658.pdf
-                    https://github.com/donglee-afar/logdeep
     """
     def __init__(self, nevent: int, lstm_nlayer: int, nhid: int, nemb: int = 1):
         super().__init__()
@@ -49,14 +48,14 @@ class LogAnomaly(torch.nn.Module):
         :param sequential:      [nwindow*nstep], LongTensor
         :return:                [nwindow*nevent], FloatTensor
         """
-        sequential = features['sequential']                         # nwindow*nstep
-        sequential = self.embedding(sequential).float()             # nwindow*nstep*nemb
-        sequential_out, _ = self.sequential_lstm(sequential)        # nwindow*nstep*nhid
+        sequential = features['sequential']                             # nwindow*nstep
+        sequential = self.embedding(sequential).float()                 # nwindow*nstep*nemb
+        sequential_out, _ = self.sequential_lstm(sequential)            # nwindow*nstep*nhid
 
         quantitative = sequential_to_quantitative_seq(
-            features['sequential'], self.nevent).float()            # nwindow*nstep*nevent
-        quantitative_out, _ = self.quantitative_lstm(quantitative)  # nwindow*nstep*nhid
+            features['sequential'].cpu(), self.nevent).float().cuda()   # nwindow*nstep*nevent
+        quantitative_out, _ = self.quantitative_lstm(quantitative)      # nwindow*nstep*nhid
 
         out = torch.cat([sequential_out[:, -1],
-                         quantitative_out[:, -1]], dim=1)           # nwindow*2nhid
-        return self.classifier(out)                                 # nwindow*nevent
+                         quantitative_out[:, -1]], dim=1)               # nwindow*2nhid
+        return self.classifier(out)                                     # nwindow*nevent
