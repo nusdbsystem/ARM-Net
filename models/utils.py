@@ -1,6 +1,7 @@
 import torch
 from models.lr import LR
 from models.dnn import DNN
+from models.robustlog import RobustLog
 
 from models.deeplog import DeepLog
 from models.loganomaly import LogAnomaly
@@ -11,12 +12,19 @@ from models.transformerLogSeqEnc import TransformerLogSeqEncoder
 default_config = {
     # session-based
     'lr': {
+        'session_based': True,
         'feature_code': 4,                      # [quantitative]
     },
     'dnn': {
+        'session_based': True,
         'feature_code': 4,                      # [quantitative]
         'mlp_nlayer': 2,
         'mlp_nhid': 256,
+    },
+    'robustlog': {
+        'session_based': True,
+        'feature_code': 2,                      # [semantic]
+        'nemb': 300,
     },
     # window-based
     'deeplog': {
@@ -51,8 +59,7 @@ def create_model(args, logger, vocab_sizes):
         elif args.model == 'dnn':
             model = DNN(2, nevent, args.mlp_nlayer, args.mlp_nhid, args.dropout)
         elif args.model == 'robustlog':
-            # [semantic]; bsz*nseq*nemb; nseq pad to 50
-            raise NotImplementedError
+            model = RobustLog(args.nlayer, args.nhid, bidirectional=True, nemb=args.nemb)
         else:
             raise ValueError(f'unknown model {args.model}')
     # window-based, unsupervised training
