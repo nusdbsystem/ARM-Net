@@ -10,9 +10,9 @@ class DNN(torch.nn.Module):
 
     def forward(self, features):
         """
-        :param x:   [bsz*nfield], FloatTensor
-        :return:    [bsz*nclass], FloatTensor
+        :param quantitative:    [bsz*nfield], FloatTensor
+        :return:                [bsz*nclass], FloatTensor
         """
-        x = features['quantitative']
-        if x.dtype != torch.float: x = x.float()
-        return self.classifier(x)
+        quantitative = features['quantitative']
+        if quantitative.dtype != torch.float: quantitative = quantitative.float()
+        return self.classifier(quantitative)

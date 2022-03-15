@@ -3,6 +3,7 @@ from models.lr import LR
 from models.dnn import DNN
 
 from models.deeplog import DeepLog
+from models.loganomaly import LogAnomaly
 from models.logSeqEnc import LogSeqEncoder
 from models.transformerLogSeqEnc import TransformerLogSeqEncoder
 
@@ -10,17 +11,21 @@ from models.transformerLogSeqEnc import TransformerLogSeqEncoder
 default_config = {
     # session-based
     'lr': {
-        'feature_code': 4,                      # quantitative
+        'feature_code': 4,                      # [quantitative]
     },
     'dnn': {
-        'feature_code': 4,                      # quantitative
+        'feature_code': 4,                      # [quantitative]
         'mlp_nlayer': 2,
         'mlp_nhid': 256,
     },
     # window-based
     'deeplog': {
-        'only_normal': True,                    # sequential
-        'feature_code': 8,
+        'only_normal': True,
+        'feature_code': 8,                      # [sequential]
+    },
+    'loganomaly': {
+        'only_normal': True,
+        'feature_code': 12,                     # [sequential, quantitative]
     }
 
 }
@@ -45,8 +50,8 @@ def create_model(args, logger, vocab_sizes):
             model = LR(2, nevent)
         elif args.model == 'dnn':
             model = DNN(2, nevent, args.mlp_nlayer, args.mlp_nhid, args.dropout)
-        elif args.model == 'robustlod':
-            # [semantics]; bsz*nseq*nemb; nseq pad to 50
+        elif args.model == 'robustlog':
+            # [semantic]; bsz*nseq*nemb; nseq pad to 50
             raise NotImplementedError
         else:
             raise ValueError(f'unknown model {args.model}')
@@ -55,8 +60,7 @@ def create_model(args, logger, vocab_sizes):
         if args.model == 'deeplog':
             model = DeepLog(nevent, args.nlayer, args.nhid, args.nemb)
         elif args.model == 'loganomaly':
-            # [sequentials, quantatives]; bsz*nstep*1; bsz*nvent*1
-            raise NotImplementedError
+            model = LogAnomaly(nevent, args.nlayer, args.nhid, args.nemb)
         elif args.model == 'armnet':
             model = LogSeqEncoder(args.nstep, len(vocab_sizes), nvocab, args.nemb, args.alpha, args.nhid,
                                   args.nquery, args.nhead, args.nlayer, args.dim_feedforward, args.dropout,

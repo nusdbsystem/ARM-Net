@@ -28,10 +28,10 @@ class LR(torch.nn.Module):
 
     def forward(self, features):
         """
-        :param x:   [bsz*nfield], FloatTensor
-        :return:    [bsz*nclass], FloatTensor
+        :param quantitative:    [bsz*nfield], FloatTensor
+        :return:                [bsz*nclass], FloatTensor
         """
-        x = features['quantitative']
-        if x.dtype != torch.float: x = x.float()
-        y = [layer(x) for layer in self.linears]        # [nclass, ...]
-        return rearrange(y, 'nclass b -> b nclass')     # bsz*nclass
+        quantitative = features['quantitative']
+        if quantitative.dtype != torch.float: quantitative = quantitative.float()
+        y = [layer(quantitative) for layer in self.linears]     # [nclass, ...]
+        return rearrange(y, 'nclass b -> b nclass')             # bsz*nclass
