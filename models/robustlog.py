@@ -1,6 +1,4 @@
-from einops import rearrange
 import numpy as np
-
 import torch
 import torch.nn as nn
 from torch import FloatTensor, LongTensor
@@ -15,7 +13,7 @@ class RobustLog(torch.nn.Module):
     """
     def __init__(self, lstm_nlayer: int, nhid: int, bidirectional: bool = True, nemb: int = 300):
         super().__init__()
-        self.num_directions = bidirectional + 1
+        self.num_directions = 2 if bidirectional else 1
         self.lstm = nn.LSTM(nemb, nhid, lstm_nlayer, batch_first=True, bidirectional=bidirectional, dropout=0.5)
         self.classifier = nn.Sequential(
             nn.Linear(nhid*self.num_directions, nhid),
@@ -31,15 +29,13 @@ class RobustLog(torch.nn.Module):
         :return:            [bsz*(D*nhid)]
         """
         bsz, max_len = lstm_out.size(0), lstm_out.size(1)
-        out = rearrange(lstm_out, 'b l h -> (b l) h')                       # (bsz*max_len)*(D*nhid)
-        attn_tanh = torch.tanh(torch.einsum('b m, m n -> b n',
-                                            out, self.w_omega))             # (bsz*max_len)*nhid
-        attn = torch.einsum('b h, h -> b', attn_tanh, self.u_omega)         # (bsz*max_len)
-        attn = rearrange(attn, '(b l)->b l', b=bsz)                         # bsz*max_len
+        attn_tanh = torch.tanh(torch.einsum('b l m, m n  -> b l n',
+                                            lstm_out, self.w_omega))        # bsz*max_len*nhid
+        attn = torch.einsum('b l n, n -> b l', attn_tanh, self.u_omega)     # bsz*max_len
         for seq_idx in range(bsz):
             attn[seq_idx][seq_len[seq_idx]:] = -np.inf                      # attn mask
         alpha = torch.softmax(attn, dim=-1)                                 # bsz*max_len
-        return torch.einsum('b l h, b l -> b h', lstm_out, alpha)           # bsz*(D*nhid)
+        return torch.einsum('b l m, b l -> b m', lstm_out, alpha)           # bsz*(D*nhid)
 
     def forward(self, features):
         """
