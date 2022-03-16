@@ -67,7 +67,7 @@ class GATModel(nn.Module):
 
     def forward(self, x, adj=None):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :param adj:     FloatTensor F*F, default fully connected
         :return:    y of size B, Regression and Classification (+sigmoid)
         """

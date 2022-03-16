@@ -8,14 +8,12 @@
 This repository contains our PyTorch implementation of [ARM-Net: Adaptive Relation Modeling Network for Structured Data](https://dl.acm.org/doi/10.1145/3448016.3457321).
 We also provide the implementation of relevant baseline models for structured (tabular) data learning.
 
-Our lightweight framework for structured data analytics implemented in [Singa](https://singa.incubator.apache.org/) can be found on our project [site](https://www.comp.nus.edu.sg/~dbsystem/armnet/).
-
 <img src="https://user-images.githubusercontent.com/14588544/123823881-2659a980-d930-11eb-918e-dc3bfa83ad97.png" width="820" />
 
 
-## Benchmark Datasets
+## ARM-Net for Large Real-world Datasets
 
-### ARM-Net for Large Real-world Datasets
+#### Benchmark Datasets
 
 * [Frappe - App Recommendation](https://www.baltrunas.info/research-menu/frappe)
 * [MovieLens - Movie Recommendation](https://grouplens.org/datasets/movielens)
@@ -25,17 +23,18 @@ Our lightweight framework for structured data analytics implemented in [Singa](h
 
 #### Summary of Results
 
-> * The main results on these large benchmark datasets are summarized below.
-> * ARM-Net achieves the overall best performance.
-> * More results and technical details can be found in the [paper](https://dl.acm.org/doi/10.1145/3448016.3457321).
-> * Note that all the results are reported with a *fixed embedding size* of **10** for a fair comparison, and higher AUC can be obtained by increasing the embedding size. 
+* Main results are summarized below.
+* ARM-Net achieves the overall best performance.
+* More results and technical details can be found in the [paper](https://dl.acm.org/doi/10.1145/3448016.3457321).
+* Note that these results are reported using a **fixed embedding size** of **10** for a fair comparison, and higher AUC can be obtained by increasing the embedding size:
 
 ```sh
-E.g., with a larger embedding size of 100, ARM-Net (single head, without ensemble with a DNN) can obtain 0.9817 AUC on Frappe with only 10 exponential neurons.
+E.g., with a larger embedding size of 100, ARM-Net (single head, without ensemble with a DNN) 
+can obtain 0.9817 AUC on Frappe with only 10 exponential neurons.
 
-CUDA_VISIBLE_DEVICES=0 python train.py --model armnet_1h --nemb 100 --h  10 --alpha 1.7 --lr 0.001 --exp_name frappe_armnet_1h_nemb --repeat 5
+CUDA_VISIBLE_DEVICES=0 python train.py --model armnet_1h --nemb 100 --h  10 --alpha 1.7 --lr 0.001 --exp_name frappe_armnet_1h_nemb_100
 
-AUC and Model Size of this ARM-Net of different embedding sizes are compared below. 
+The AUC and Model Size of this ARM-Net with different embedding sizes are listed below. 
 ```
 | Embedding Size | 10  | 20  | 30  | 40  |  50  | 60  | 70  | 80  | 90  |  **100**   | 110  | 120  |
 |:--------------:|:---:|:---:|:---:|:---:|:----:|:---:|:---:|:---:|:---:|:----------:|:---:|:---:|
@@ -47,20 +46,44 @@ AUC and Model Size of this ARM-Net of different embedding sizes are compared bel
 <img src="https://user-images.githubusercontent.com/14588544/139670215-77544a4b-5bec-4ede-9b58-1ac1a24ff4cd.png" width="660" />
 
 
-### ARM-Net for Small to Medium Tabular Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
+### Baseline Models
 
-> * We also implement and evaluate prior arts, latest models and our ARM-Net on [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
-> 
-> * **Models** and **Utilities** for evaluating models on [121 UCI Datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf) are included in this [repository](https://github.com/nusdbsystem/ARM-Net/tree/uci).
-> 
+| Model                               | Code                                                                                                | Reference                                                                      |
+|-------------------------------------|-----------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| Logistic Regression                 | LR, [lr.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/lr.py)                          | -                                                                              |
+| Factorization Machine               | FM, [fm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/fm.py)                          | [**ICDE-10**] [FM](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) |
+| Attentional Factorization Machine   | AFM, [afm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afm.py)                       | [**IJCAI-17**] [AFM](https://arxiv.org/abs/1708.04617)                         |
+| Higher-Order Factorization Machines | HOFM, [hofm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/hofm.py)                    | [**NeurIPS-16**] [HOFM](https://dl.acm.org/doi/10.5555/3157382.3157473)        |
+| Deep Neural Network                 | DNN, [dnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dnn.py)                       | -                                                                              |
+| Graph Convolutional Networks        | GCN, [gcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gcn.py)                       | [**ICLR-17**] [GCN](https://arxiv.org/abs/1609.02907)                          |
+| Graph Convolutional Networks        | GAT, [gat.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gat.py)                       | [**ICLR-18**] [GAT](https://arxiv.org/abs/1710.10903)                          |
+| Wide&Deep                           | Wide&Deep, [wd.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/wd.py)                   | [**RecSys-16**] [Wide&Deep](https://arxiv.org/abs/1606.07792)                  |
+| Product Neural Network              | IPNN/KPNN, [pnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/pnn.py)                 | [**ICDE-16**] [PNN](https://arxiv.org/abs/1611.00144)                          |
+| Neural Factorization Machine        | NFM, [nfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/nfm.py)                       | [**SIGIR-17**] [NFM](https://arxiv.org/abs/1708.05027)                         |
+| DeepFM                              | DeepFM, [dfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dfm.py)                    | [**IJCAI-17**] [DeepFM](https://arxiv.org/abs/1703.04247)                      |
+| Deep & Cross Network                | DCN/DCN+, [dcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dcn.py)                  | [**KDD-17**] [DCN](https://arxiv.org/abs/1708.05123)                           |
+| Gated Linear Unit                   | SA_GLU, [sa_glu.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/sa_glu.py)              | [**ICML-17**] [GLU](https://arxiv.org/abs/1612.08083)                          |
+| xDeepFM                             | CIN/xDeepFM, [xdfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/xdfm.py)             | [**KDD-18**] [xDeepFM](https://arxiv.org/abs/1803.05170)                       |
+| Context-Aware Self-Attention Network | GC_ARM, [gc_arm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gc_arm.py)              | [**AAAI-19**] [GC-ARM](https://arxiv.org/abs/1902.05766)                       |
+| AFN                                 | AFN/AFN+, [afn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afn.py)                  | [**AAAI-20**] [AFN](https://arxiv.org/abs/1909.03276)                          |
+| ARM-Net                             | ARM-Net/ARM-Net+, [armnet.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/armnet.py)    | [**SIGMOD-21**] [ARM-Net](https://dl.acm.org/doi/10.1145/3448016.3457321)      |
+| ARM-Net-1h (one-head, recommended)  | ARM-Net/ARM-Net+, [armnet_1h.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/armnet_1h.py) | [**SIGMOD-21**] [ARM-Net-1h](https://dl.acm.org/doi/10.1145/3448016.3457321)   |
+
+
+
+## ARM-Net for Small to Medium Tabular Datasets ([121 UCI datasets](https://archive.ics.uci.edu/ml/datasets.php))
+
+We also implement and evaluate prior arts, latest models and our ARM-Net on [UCI datasets](https://archive.ics.uci.edu/ml/datasets.php). These datasets are ***multi-class*** real-world classification tasks, whose features are ***all converted into numerical features*** following [common practice](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf).
+**Models** and **Utilities** for evaluating models on [121 UCI Datasets](https://jmlr.org/papers/volume15/delgado14a/delgado14a.pdf) are included in this [branch](https://github.com/nusdbsystem/ARM-Net/tree/uci).
+ 
 
 
 #### Summary of UCI Results
 
-> * The main results on these UCI datasets are summarized below.
-> * ARM-Net achieves overall best performance.
-> * More results and technical details can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/uci#main-results-evaluated-on-first-36121-datasets-updating).
-> 
+* Main results are summarized below.
+* ARM-Net achieves overall best performance.
+* More results and technical details can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/uci#main-results-evaluated-on-first-36121-datasets-updating).
+ 
 
 | Model |  Rank(Best_Cnt)  | abalone|  acute-inflammation|  acute-nephritis|  adult|  annealing|  arrhythmia|  audiology-std|  balance-scale|  balloons|  bank|  blood|  breast-cancer|  breast-cancer-wisc|  breast-cancer-wisc-diag|  breast-cancer-wisc-prog|  breast-tissue|  car|  cardiotocography-10clases|  cardiotocography-3clases|  chess-krvk|  chess-krvkp|  congressional-voting|  conn-bench-sonar-mines-rocks|  conn-bench-vowel-deterding|  connect-4|  contrac|  credit-approval|  cylinder-bands|  dermatology|  echocardiogram|  ecoli|  energy-y1|  energy-y2|  fertility|  flags|  glass|
 |:-----------:|:-----------:|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
@@ -74,35 +97,16 @@ AUC and Model Size of this ARM-Net of different embedding sizes are compared bel
 | `ARM-Net` | `1st (15/36)` |`0.6603/0.0034`|  0.9767/0.0389|  `0.9600/0.0800`|  `0.8562/0.0011`|  0.1500/0.1131|  `0.6487/0.0214`|  0.5520/0.0299|  0.9135/0.0070|  0.7500/0.0791|  `0.8922/0.0012`|  `0.8922/0.0012`|  `0.7203/0.0193`|  0.9530/0.0118|  0.9521/0.0186|  0.6828/0.0485|  0.5170/0.0638|  0.9463/0.0086|  0.7868/0.0054|  `0.9146/0.0051`|  `0.6982/0.0109`|  `0.9826/0.0040`|  0.5760/0.0193|  0.7712/0.0335|  0.9675/0.0115|  `0.8672/0.0028`|  `0.5228/0.0119`|  0.8620/0.0187|  0.7133/0.0305|  0.9497/0.0181|  `0.8338/0.0406`|  0.8214/0.0279|  `0.8844/0.0048`|  0.8750/0.0304|  0.8240/0.0528|  0.4330/0.0526|  `0.6150/0.0232`|
 
 
-### ARM-Net for [Log-Based Anomaly Detection](https://arxiv.org/abs/2107.05908)
+## ARM-Net for [Log-Based Anomaly Detection](https://arxiv.org/abs/2107.05908)
 
-> * ARM-Net can also be readily adapted for supporting Log-based Anomaly Detection, which is to detect anomalies given a sequence of history log events.
-> * Each log event consists of tabular data (a fixed number of features) and raw text (a token sequence).
-> * **Models** and **Utilities** for supporting End-to-end Log-based Anomaly Detection can be found [here](https://github.com/nusdbsystem/ARM-Net/tree/log).
-
+ARM-Net can also be readily adapted for supporting Log-based Anomaly Detection.
+Log-based anomaly detection aims to discover abnormal system behaviors (*binary classification*) by analyzing log sequences that are generated routinely by the system at runtime.
 
 
-### Baseline Models
+<img src="https://user-images.githubusercontent.com/14588544/158519066-bf5f0a77-2507-4235-ae78-b4521ffdb906.png" width="380" />
 
-| Model |  Code | Reference |
-|-------|-----|-----------|
-| Logistic Regression | LR, [lr.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/lr.py) | |
-| Factorization Machine | FM, [fm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/fm.py) | [S Rendle, Factorization Machines, 2010.](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) |
-| Attentional Factorization Machine | AFM, [afm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afm.py) | [J Xiao, et al. Attentional Factorization Machines: Learning the Weight of Feature Interactions via Attention Networks, 2017.](https://arxiv.org/abs/1708.04617) |
-| Higher-Order Factorization Machines | HOFM, [hofm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/hofm.py) | [ M Blondel, et al. Higher-Order Factorization Machines, 2016.](https://dl.acm.org/doi/10.5555/3157382.3157473) |
-| Deep Neural Network | DNN, [dnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dnn.py) | |
-| Graph Convolutional Networks | GCN, [gcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gcn.py) | [T Kipf, et al. Semi-Supervised Classification with Graph Convolutional Networks, 2016.](https://arxiv.org/abs/1609.02907)|
-| Graph Convolutional Networks | GAT, [gat.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gat.py) | [P Veličković, et al. Graph Attention Networks, 2017.](https://arxiv.org/abs/1710.10903)|
-| Wide&Deep | Wide&Deep, [wd.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/wd.py) | [HT Cheng, et al. Wide & Deep Learning for Recommender Systems, 2016.](https://arxiv.org/abs/1606.07792) |
-| Product Neural Network | IPNN/KPNN, [pnn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/pnn.py) | [Y Qu, et al. Product-based Neural Networks for User Response Prediction, 2016.](https://arxiv.org/abs/1611.00144) |
-| Neural Factorization Machine | NFM, [nfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/nfm.py) | [X He and TS Chua, Neural Factorization Machines for Sparse Predictive Analytics, 2017.](https://arxiv.org/abs/1708.05027) |
-| DeepFM | DeepFM, [dfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dfm.py) | [H Guo, et al. DeepFM: A Factorization-Machine based Neural Network for CTR Prediction, 2017.](https://arxiv.org/abs/1703.04247) |
-| Deep & Cross Network | DCN/DCN+, [dcn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/dcn.py) | [R Wang, et al. Deep & Cross Network for Ad Click Predictions, 2017.](https://arxiv.org/abs/1708.05123) |
-| Gated Linear Unit | SA_GLU, [sa_glu.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/sa_glu.py) | [Y N. Dauphin, et al. Language Modeling with Gated Convolutional Networks, 2017](https://arxiv.org/abs/1612.08083) |
-| xDeepFM | CIN/xDeepFM, [xdfm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/xdfm.py) | [J Lian, et al. xDeepFM: Combining Explicit and Implicit Feature Interactions for Recommender Systems, 2018.](https://arxiv.org/abs/1803.05170) |
-| Context-Aware Self-Attention Network | GC_ARM, [gc_arm.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/gc_arm.py) | [B Yang, et al. Context-Aware Self-Attention Networks, 2019](https://arxiv.org/abs/1902.05766) |
-| AFN | AFN/AFN+, [afn.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/afn.py) | [W Cheng, et al. Adaptive Factorization Network: Learning Adaptive-Order Feature Interactions, 2020.](https://arxiv.org/abs/1909.03276) |
-| ARM-Net | ARM-Net/ARM-Net+, [armnet.py](https://github.com/nusdbsystem/ARM-Net/blob/main/models/armnet.py) | [S Cai, et al. ARM-Net: Adaptive Relation Modeling Network for Structured Data, 2021.](https://dl.acm.org/doi/10.1145/3448016.3457321) |
+Each log is a message in unstructued data format (raw text), which can be parsed into structured data format of a number of key information *fields*, e.g., date, pid, level, event ID and etc.
+**Models** and **Utilities** for supporting End-to-end Log-based Anomaly Detection can be found in this [branch](https://github.com/nusdbsystem/ARM-Net/tree/log).
 
 
 ### Citation

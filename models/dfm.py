@@ -16,7 +16,7 @@ class DeepFMModel(torch.nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    y of size B, Regression and Classification (+sigmoid)
         """
         x_emb = self.embedding(x)                                   # B*F*E

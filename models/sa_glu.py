@@ -36,10 +36,10 @@ class SA_GLUModel(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    y of size B, Regression and Classification (+sigmoid)
         """
-        x['vals'].clamp_(0.001, 1.)
+        x['value'].clamp_(0.001, 1.)
         x_emb = self.embedding(x)                               # B*F*E
 
         xw = self.self_attn_w(x_emb)[0]+self.w_b                # B*F*E

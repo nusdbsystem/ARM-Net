@@ -80,10 +80,10 @@ class GC_ARMModel(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    y of size B, Regression and Classification (+sigmoid)
         """
-        x['vals'].clamp_(0.001, 1.)
+        x['value'].clamp_(0.001, 1.)
         x_emb = self.embedding(x)                                       # B*F*E
 
         x_exp = self.emb_bn(torch.exp(x_emb))                           # B*F*E

@@ -42,8 +42,8 @@ class ARMNetModel(nn.Module):
         Important Hyper-Params: alpha (sparsity), nhead (attention heads), nhid (exponential neurons)
     """
     def __init__(self, nfield: int, nfeat: int, nemb: int, nhead: int, alpha: float, nhid: int,
-                 mlp_layers: int, mlp_hid: int, dropout: float, ensemble: bool,
-                 deep_layers: int, deep_hid: int, noutput: int = 1):
+                 mlp_nlayer: int, mlp_nhid: int, dropout: float, ensemble: bool,
+                 deep_nlayer: int, deep_nhid: int, noutput: int = 1):
         '''
         :param nfield:          Number of Fields
         :param nfeat:           Total Number of Features
@@ -51,12 +51,12 @@ class ARMNetModel(nn.Module):
         :param nhead:           Number of Attention Heads (each with a bilinear attn weight)
         :param alpha:           Sparsity hyper-parameter for ent-max
         :param nhid:            Number of Exponential Neuron
-        :param mlp_layers:      Number of layers for prediction head
-        :param mlp_hid:         Number of hidden neurons for prediction head
+        :param mlp_nlayer:      Number of layers for prediction head
+        :param mlp_nhid:        Number of hidden neurons for prediction head
         :param dropout:         Dropout rate
         :param ensemble:        Whether to Ensemble with a DNN
-        :param deep_layers:     Number of layers for Ensemble DNN
-        :param deep_hid:        Number of hidden neurons for Ensemble DNN
+        :param deep_nlayer:     Number of layers for Ensemble DNN
+        :param deep_nhid:       Number of hidden neurons for Ensemble DNN
         :param noutput:         Number of prediction output, e.g., 1 for binary cls
         '''
         super().__init__()
@@ -66,20 +66,20 @@ class ARMNetModel(nn.Module):
         self.attn_layer = SparseAttLayer(nhead, nfield, nemb, nemb, nhid, alpha)
         self.arm_bn = nn.BatchNorm1d(nhead*nhid)
         # MLP
-        self.mlp = MLP(nhead*nhid*nemb, mlp_layers, mlp_hid, dropout, noutput=noutput)
+        self.mlp = MLP(nhead * nhid * nemb, mlp_nlayer, mlp_nhid, dropout, noutput=noutput)
         if ensemble:
             self.deep_embedding = Embedding(nfeat, nemb)
-            self.deep_mlp = MLP(nfield*nemb, deep_layers, deep_hid, dropout, noutput=noutput)
+            self.deep_mlp = MLP(nfield * nemb, deep_nlayer, deep_nhid, dropout, noutput=noutput)
             self.ensemble_layer = nn.Linear(2*noutput, 1*noutput)
             nn.init.constant_(self.ensemble_layer.weight, 0.5)
             nn.init.constant_(self.ensemble_layer.bias, 0.)
 
     def forward(self, x):
         """
-        :param x:   {'ids': [bsz, nfield], LongTensor, 'vals': [bsz, nfield], FloatTensor}
+        :param x:   {'id': [bsz, nfield], LongTensor, 'value': [bsz, nfield], FloatTensor}
         :return:    y: [bsz], FloatTensor of size B, for Regression or Classification
         """
-        x['vals'].clamp_(0.001, 1.)
+        x['value'].clamp_(0.001, 1.)
         x_arm = self.embedding(x)                                       # bsz*nfield*nemb
 
         arm_weight = self.attn_layer(x_arm)                             # bsz*nhead*nhid*nfield

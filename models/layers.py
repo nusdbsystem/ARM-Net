@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.entmax import EntmaxBisect
+
 
 class Embedding(nn.Module):
 
@@ -14,11 +14,12 @@ class Embedding(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    embeddings B*F*E
         """
-        emb = self.embedding(x['ids'])                          # B*F*E
-        return emb * x['vals'].unsqueeze(2)                     # B*F*E
+        emb = self.embedding(x['id'])                           # B*F*E
+        return emb * x['value'].unsqueeze(2)                    # B*F*E
+
 
 class Linear(nn.Module):
 
@@ -29,11 +30,12 @@ class Linear(nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    linear transform of x
         """
-        linear = self.weight(x['ids']).squeeze(2) * x['vals']   # B*F
+        linear = self.weight(x['id']).squeeze(2) * x['value']   # B*F
         return torch.sum(linear, dim=1) + self.bias             # B
+
 
 class FactorizationMachine(nn.Module):
 
@@ -52,13 +54,16 @@ class FactorizationMachine(nn.Module):
             fm = torch.sum(fm, dim=1)                           # B
         return 0.5 * fm                                         # B*E/B
 
+
 def get_triu_indices(n, diag_offset=1):
     """get the row, col indices for the upper-triangle of an (n, n) array"""
     return np.triu_indices(n, diag_offset)
 
+
 def get_all_indices(n):
     """get all the row, col indices for an (n, n) array"""
     return map(list, zip(*[(i, j) for i in range(n) for j in range(n)]))
+
 
 class MLP(nn.Module):
 
@@ -81,6 +86,7 @@ class MLP(nn.Module):
         :return:    FloatTensor B*nouput
         """
         return self.mlp(x)
+
 
 def normalize_adj(adj):
     """normalize and return a adjacency matrix (numpy array)"""
@@ -130,6 +136,7 @@ class scaled_dot_prodct_attention_(nn.Module):
         output = torch.matmul(attn, v)
 
         return output, attn
+
 
 class MultiHeadAttention(nn.Module):
     '''Multi-head Attention Module'''

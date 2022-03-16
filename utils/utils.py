@@ -5,6 +5,8 @@ import math
 import logging
 import sys
 import shutil
+import random
+import numpy as np
 
 
 # setup logger
@@ -117,3 +119,13 @@ def save_checkpoint(ckpt, is_best, file_dir, file_name='model.ckpt'):
     ckpt_name = "{0}{1}".format(file_dir, file_name)
     torch.save(ckpt, ckpt_name)
     if is_best: shutil.copyfile(ckpt_name, "{0}{1}".format(file_dir, 'best_'+file_name))
+
+
+def seed_everything(seed=2022):
+    ''' [reference] https://gist.github.com/KirillVladimirov/005ec7f762293d2321385580d3dbe335 '''
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True

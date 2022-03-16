@@ -39,50 +39,50 @@ def create_model(args, logger):
     elif args.model == 'cin':
         model = CINModel(args.nfield, args.nfeat, args.nemb, args.k, args.h)
     elif args.model == 'afn':
-        model = AFNModel(args.nfield, args.nfeat, args.nemb, args.h, args.nlayer, args.mlp_hid,
-                    args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+        model = AFNModel(args.nfield, args.nfeat, args.nemb, args.h, args.mlp_nlayer, args.mlp_nhid,
+                    args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_nhid)
     elif args.model == 'armnet':
         model = ARMNetModel(args.nfield, args.nfeat, args.nemb, args.nattn_head, args.alpha, args.h,
-                    args.nlayer, args.mlp_hid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+                    args.mlp_nlayer, args.mlp_nhid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_nhid)
     elif args.model == 'armnet_1h':
-        model = ARMNet1H(args.nfield, args.nfeat, args.nemb, args.alpha, args.h, args.nemb, args.nlayer, args.mlp_hid,
-                         args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+        model = ARMNet1H(args.nfield, args.nfeat, args.nemb, args.alpha, args.h, args.nemb, args.mlp_nlayer,
+                         args.mlp_nhid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_nhid)
 
     elif args.model == 'dnn':
-        model = DNNModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = DNNModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'gcn':
-        model = GCNModel(args.nfield, args.nfeat, args.nemb, args.k, args.h, args.nlayer,
-                         args.mlp_hid, args.dropout)
+        model = GCNModel(args.nfield, args.nfeat, args.nemb, args.k, args.h, args.mlp_nlayer,
+                         args.mlp_nhid, args.dropout)
     elif args.model == 'gat':
         model = GATModel(args.nfield, args.nfeat, args.nemb, args.k, args.h,
-                         args.nlayer, args.mlp_hid, args.dropout, 0.2, args.nattn_head)
+                         args.mlp_nlayer, args.mlp_nhid, args.dropout, 0.2, args.nattn_head)
 
     elif args.model == 'wd':
-        model = WDModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = WDModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'ipnn':
-        model = IPNNModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = IPNNModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'kpnn':
-        model = KPNNModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = KPNNModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'nfm':
-        model = NFMModel(args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = NFMModel(args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'dfm':
-        model = DeepFMModel(args.nfield, args.nfeat, args.nemb, args.nlayer, args.mlp_hid, args.dropout)
+        model = DeepFMModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'dcn+':
-        model = DCNModel(args.nfield, args.nfeat, args.nemb, args.k, args.nlayer, args.mlp_hid, args.dropout)
+        model = DCNModel(args.nfield, args.nfeat, args.nemb, args.k, args.mlp_nlayer, args.mlp_nhid, args.dropout)
     elif args.model == 'xdfm':
         model = xDeepFMModel(args.nfield, args.nfeat, args.nemb, args.k, args.h,
-                    args.nlayer, args.mlp_hid, args.dropout)
+                    args.mlp_nlayer, args.mlp_nhid, args.dropout)
 
     elif args.model == 'gc_arm':
-        model = GC_ARMModel(args.nfield, args.nfeat, args.nemb, args.nattn_head, args.alpha, args.h,
-                            args.nlayer, args.mlp_hid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+        model = GC_ARMModel(args.nfield, args.nfeat, args.nemb, args.nattn_head, args.alpha, args.h, args.mlp_nlayer,
+                            args.mlp_nhid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_nhid)
     elif args.model == 'sa_glu':
-        model = SA_GLUModel(args.nfield, args.nfeat, args.nemb,
-                            args.nlayer, args.mlp_hid, args.dropout, args.ensemble, args.dnn_nlayer, args.dnn_hid)
+        model = SA_GLUModel(args.nfield, args.nfeat, args.nemb, args.mlp_nlayer, args.mlp_nhid, args.dropout,
+                            args.ensemble, args.dnn_nlayer, args.dnn_nhid)
 
     else:
         raise ValueError(f'unknown model {args.model}')
 
     if torch.cuda.is_available(): model = model.cuda()
-    logger.info(f'model parameters: {sum([p.data.nelement() for p in model.parameters()])}')
+    logger.info(f'{model}\nmodel parameters: {sum([p.data.nelement() for p in model.parameters()])}')
     return model

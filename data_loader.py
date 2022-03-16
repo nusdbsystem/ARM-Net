@@ -16,17 +16,17 @@ class LibsvmDataset(Dataset):
         def decode_libsvm(line):
             columns = line.split(' ')
             map_func = lambda pair: (int(pair[0]), float(pair[1]))
-            ids, vals = zip(*map(lambda col: map_func(col.split(':')), columns[1:]))
-            sample = {'ids': torch.LongTensor(ids),
-                      'vals': torch.FloatTensor(vals),
+            id, value = zip(*map(lambda col: map_func(col.split(':')), columns[1:]))
+            sample = {'id': torch.LongTensor(id),
+                      'value': torch.FloatTensor(value),
                       'y': float(columns[0])}
             return sample
 
         with open(fname) as f:
             sample_lines = sum(1 for line in f)
 
-        self.feat_ids = torch.LongTensor(sample_lines, nfields)
-        self.feat_vals = torch.FloatTensor(sample_lines, nfields)
+        self.feat_id = torch.LongTensor(sample_lines, nfields)
+        self.feat_value = torch.FloatTensor(sample_lines, nfields)
         self.y = torch.FloatTensor(sample_lines)
 
         self.nsamples = 0
@@ -36,8 +36,8 @@ class LibsvmDataset(Dataset):
                 while line:
                     try:
                         sample = decode_libsvm(line)
-                        self.feat_ids[self.nsamples] = sample['ids']
-                        self.feat_vals[self.nsamples] = sample['vals']
+                        self.feat_id[self.nsamples] = sample['id']
+                        self.feat_value[self.nsamples] = sample['value']
                         self.y[self.nsamples] = sample['y']
                         self.nsamples += 1
                     except Exception:
@@ -50,8 +50,8 @@ class LibsvmDataset(Dataset):
         return self.nsamples
 
     def __getitem__(self, idx):
-        return {'ids': self.feat_ids[idx],
-                'vals': self.feat_vals[idx],
+        return {'id': self.feat_id[idx],
+                'value': self.feat_value[idx],
                 'y': self.y[idx]}
 
 def libsvm_dataloader(args):
@@ -79,15 +79,15 @@ class UCILibsvmDataset(Dataset):
         assert X.shape[0] == y.shape[0]
         self.nsamples, self.nfeat = X.shape
 
-        self.feat_ids = torch.LongTensor(self.nsamples, self.nfeat)
-        self.feat_vals = torch.FloatTensor(self.nsamples, self.nfeat)
+        self.feat_id = torch.LongTensor(self.nsamples, self.nfeat)
+        self.feat_value = torch.FloatTensor(self.nsamples, self.nfeat)
         self.y = torch.FloatTensor(self.nsamples)
 
         with tqdm(total=self.nsamples) as pbar:
-            ids = torch.LongTensor(range(self.nfeat))
+            id = torch.LongTensor(range(self.nfeat))
             for idx in range(self.nsamples):
-                self.feat_ids[idx] = ids
-                self.feat_vals[idx] = torch.FloatTensor(X[idx])
+                self.feat_id[idx] = id
+                self.feat_value[idx] = torch.FloatTensor(X[idx])
                 self.y[idx] = y[idx]
 
                 pbar.update(1)
@@ -97,8 +97,8 @@ class UCILibsvmDataset(Dataset):
         return self.nsamples
 
     def __getitem__(self, idx):
-        return {'ids': self.feat_ids[idx],
-                'vals': self.feat_vals[idx],
+        return {'id': self.feat_id[idx],
+                'value': self.feat_value[idx],
                 'y': self.y[idx]}
 
 def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
@@ -106,7 +106,7 @@ def uci_loader(data_dir, batch_size, valid_perc=0., libsvm=False, workers=4):
     :param data_dir:        Path to load the uci dataset
     :param batch_size:      Batch size
     :param valid_perc:      valid percentage split from train (default 0, whole train set)
-    :param libsvm:          Libsvm loader of format {'ids', 'vals', 'y'}
+    :param libsvm:          Libsvm loader of format {'id', 'value', 'y'}
     :param workers:         the number of subprocesses to load data
     :return:                train/valid/test loader, train_loader.nclass
     '''

@@ -41,7 +41,7 @@ class AFMModel(torch.nn.Module):
 
     def forward(self, x):
         """
-        :param x:   {'ids': LongTensor B*F, 'vals': FloatTensor B*F}
+        :param x:   {'id': LongTensor B*F, 'value': FloatTensor B*F}
         :return:    y of size B, Regression and Classification (+sigmoid)
         """
         y = self.linear(x) + self.afm(self.embedding(x))
