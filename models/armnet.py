@@ -4,8 +4,7 @@ from utils.entmax import EntmaxBisect
 
 
 class SparseAttention(nn.Module):
-    def __init__(self, nfield: int, d_k: int, nhid: int,
-                 nemb: int, alpha: float = 1.5):
+    def __init__(self, nfield: int, d_k: int, nhid: int, nemb: int, alpha: float = 1.5):
         """ Sparse Attention Layer w/o bilinear weight"""
         super(SparseAttention, self).__init__()
         self.sparsemax = nn.Softmax(dim=-1) if alpha == 1. \

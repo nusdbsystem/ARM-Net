@@ -17,7 +17,7 @@ vocab_size_map: Dict[str, LongTensor] = {
     'hdfs': __HDFS_vocab_sizes__,
     'bgl': __BGL_vocab_sizes__
 }
-# format: {eventID; [int]*300}; event embeddings from event NLP preprocessing
+# format: {eventID; [float]*300}; event embeddings from event NLP preprocessing
 event_emb_map = {}
 __event_emb_size__ = 300
 
@@ -32,6 +32,14 @@ def get_vocab_size(dataset: str, tabular_cap: int) -> LongTensor:
     return vocab_sizes
 
 
+def decode_feature_code(feature_code: int) -> [bool, bool, bool, bool]:
+    # feature_code:    [sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1]
+    assert 1 <= feature_code <= 15, f'legal feature code 1~15 (0001~1111)'
+    use_sequential, use_quantitative, use_semantic, use_tabular = \
+        feature_code >> 3 & 1, feature_code >> 2 & 1, feature_code >> 1 & 1, feature_code & 1
+    return use_sequential, use_quantitative, use_semantic, use_tabular
+
+
 class LogDataset(Dataset):
     """ Dataset for Log Data (EventID in the last Field) """
     def __init__(self, data: Union[list, np.ndarray], nstep: int, vocab_sizes: LongTensor,
@@ -41,10 +49,8 @@ class LogDataset(Dataset):
         # data sample format: [log_seq: [[int]*nfield]*nlog, log_seq_label: int]
         assert (self.nfield == len(data[0][0][0])), \
             f"vocab_sizes field {self.nfield} and data fields {len(data[0][0][0])} not match"
-        # feature_code:    [sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1]
-        assert 1 <= feature_code <= 15, f'legal feature code 1~15 (0001~1111)'
         self.use_sequential, self.use_quantitative, self.use_semantic, self.use_tabular = \
-            feature_code >> 3 & 1, feature_code >> 2 & 1, feature_code >> 1 & 1, feature_code & 1
+            decode_feature_code(feature_code)
         # offsets for tabular embedding
         offsets = torch.zeros(self.nfield, dtype=torch.int64)                           # nfield
         offsets[1:] = torch.cumsum(vocab_sizes, dim=0)[:-1]

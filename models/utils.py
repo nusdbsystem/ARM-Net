@@ -5,8 +5,8 @@ from models.robustlog import RobustLog
 
 from models.deeplog import DeepLog
 from models.loganomaly import LogAnomaly
-from models.logSeqEnc import LogSeqEncoder
-from models.transformerLogSeqEnc import TransformerLogSeqEncoder
+from models.tabularlog import TabularLog
+from data_loader import __event_emb_size__
 
 # set default configs for args, will always overwrite args
 default_config = {
@@ -24,7 +24,7 @@ default_config = {
     'robustlog': {
         'session_based': True,
         'feature_code': 2,                      # [semantic]
-        'nemb': 300,
+        'nemb': __event_emb_size__,
     },
     # window-based
     'deeplog': {
@@ -34,6 +34,9 @@ default_config = {
     'loganomaly': {
         'only_normal': True,
         'feature_code': 12,                     # [sequential, quantitative]
+    },
+    'tabularlog': {
+        'only_normal': True
     }
 
 }
@@ -51,7 +54,7 @@ def update_default_config(args):
 def create_model(args, logger, vocab_sizes):
     if logger: logger.info(f'=> creating model {args.model}')
     # nevent -> vocab last feature
-    nevent, nvocab = vocab_sizes[-1].item(), sum(vocab_sizes).item()
+    nevent, nfield, nvocab = vocab_sizes[-1].item(), len(vocab_sizes), sum(vocab_sizes).item()
     # session-based, supervised training
     if args.session_based:
         if args.model == 'lr':
@@ -61,22 +64,18 @@ def create_model(args, logger, vocab_sizes):
         elif args.model == 'robustlog':
             model = RobustLog(args.nlayer, args.nhid, bidirectional=True, nemb=args.nemb)
         else:
-            raise ValueError(f'unknown model {args.model}')
+            raise NotImplementedError
     # window-based, unsupervised training
     else:
         if args.model == 'deeplog':
             model = DeepLog(nevent, args.nlayer, args.nhid, args.nemb)
         elif args.model == 'loganomaly':
             model = LogAnomaly(nevent, args.nlayer, args.nhid, args.nemb)
-        elif args.model == 'armnet':
-            model = LogSeqEncoder(args.nstep, len(vocab_sizes), nvocab, args.nemb, args.alpha, args.nhid,
-                                  args.nquery, args.nhead, args.nlayer, args.dim_feedforward, args.dropout,
-                                  args.mlp_nlayer, args.mlp_nhid, nevent)
-        elif args.model == 'transformer':
-            model = TransformerLogSeqEncoder(args.nstep, nvocab, args.nemb, args.nhead, args.nlayer,
-                                 args.dim_feedforward, args.dropout, args.mlp_nlayer, args.mlp_nhid, nevent)
+        elif args.model == 'tabularlog':
+            model = TabularLog(nevent, args.feature_code, nfield, nvocab, args.nemb, args.alpha, args.nhid,
+                               args.nquery, args.nlayer, args.dropout, args.mlp_nlayer, args.mlp_nhid)
         else:
-            raise ValueError(f'unknown model {args.model}')
+            raise NotImplementedError
 
     model = torch.nn.DataParallel(model).cuda()
     if logger: logger.info(f'{model}\nmodel parameters: {sum([p.data.nelement() for p in model.parameters()])}')
