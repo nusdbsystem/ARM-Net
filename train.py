@@ -57,9 +57,10 @@ def get_args():
     parser.add_argument('--inner_lr', default=3e-4, type=float, help='inner training learning rate, default 3e-4')
     # 3. dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
-    parser.add_argument('--feature_code', type=int, default=4, help='1~15, default quantitative, binary feature code'
-            'for [sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1] see data_loader.LogDataset')
-    parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle the whole dataset before split")
+    parser.add_argument('--feature_code', type=int, default=4, help='1~15, default quantitative, binary code for'
+        '[sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1] see data_loader.decode_feature_code')
+    parser.add_argument('--shuffle', type=int, default=0, help='0~3, default no shuffle, binary code for'
+        '[whole dataset, valid+test set] <-> [0/1][0/1] see data_loader.decode_shuffle_code/log_loader')
     parser.add_argument("--only_normal", action="store_true", default=False, help="only train using normal log seq")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
     parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')

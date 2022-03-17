@@ -20,26 +20,31 @@ class TabularSeqEncoder(nn.Module):
         self.query = nn.Parameter(torch.randn(nquery, nemb))
         self.seq_query = Attention(query_dim=nemb, context_dim=nemb, heads=8, dim_head=nemb)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, seq_len: Tensor) -> Tensor:
         """
-        :param x:       [bsz, nstep, nfield], LongTensor
+        :param x:       [bsz, max_len, nfield], LongTensor
+        :param seq_len: [bsz, max_len, nfield], LongTensor
         :return:        [bsz, nquery, nemb], FloatTensor
         """
         bsz = x.size(0)
         # arm
-        x = self.feature_embedding(x)                                   # bsz*nstep*nfield*nemb
-        x = rearrange(x, 'b t f e -> (b t) f e')                        # (bsz*nstep)*nfield*nemb
-        x = self.arm(x)                                                 # (bsz*nstep)*nhid*nemb
-        x = reduce(x, '(b t) h e -> b t e', 'mean', b=bsz)              # bsz*nstep*nemb
+        x = self.feature_embedding(x)                                   # bsz*max_len*nfield*nemb
+        x = rearrange(x, 'b t f e -> (b t) f e')                        # (bsz*max_len)*nfield*nemb
+        x = self.arm(x)                                                 # (bsz*max_len)*nhid*nemb
+        x = reduce(x, '(b t) h e -> b t e', 'mean', b=bsz)              # bsz*max_len*nemb
         # positional encoding
-        x = self.pos_enc(x)                                             # bsz*nstep*nemb
+        x = self.pos_enc(x)                                             # bsz*max_len*nemb
         # cross-attn
+        mask = torch.zeros((x.size(0), x.size(1)),
+                           dtype=torch.bool, device=x.device)           # bsz*max_len
+        for seq_idx in range(x.size(0)):
+            mask[seq_idx, seq_len[seq_idx]:] = True
         query = repeat(self.query, 'q e -> b q e', b=bsz)               # bsz*nquery*nemb
-        x = self.seq_query(query, context=x)                            # bsz*nquery*nemb
+        x = self.seq_query(query, context=x, mask=mask)                 # bsz*nquery*nemb
         return x
 
 
-class TabularLog(nn.Module):
+class TabSession(nn.Module):
     """ Log Sequence Encoder """
     def __init__(self, nevent: int, feature_code: int, nfield: int, nfeat: int, nemb: int,
                  alpha: float, nhid: int, nquery: int, lstm_nlayer: int = 2, dropout: float = 0.0,
@@ -57,12 +62,12 @@ class TabularLog(nn.Module):
         :param mlp_nhid:            Number of MLP hidden units for classifier
         :param nevent:              Number of prediction output, i.e., eventID to be predict
         """
-        super(TabularLog, self).__init__()
+        super(TabSession, self).__init__()
         classifier_ndim = 0
         self.use_sequential, self.use_quantitative, self.use_semantic, self.use_tabular = \
             decode_feature_code(feature_code)
         if self.use_sequential:
-            self.sequential_embedding = nn.Embedding(nevent, nemb)
+            self.sequential_embedding = nn.Embedding(nevent+1, nemb)
             self.sequential_lstm = nn.LSTM(nemb, nhid, lstm_nlayer,
                                            batch_first=True, bidirectional=False, dropout=dropout)
             classifier_ndim += nhid
@@ -74,35 +79,40 @@ class TabularLog(nn.Module):
                                          batch_first=True, bidirectional=False, dropout=dropout)
             classifier_ndim += nhid
         if self.use_tabular:
-            self.tabular_encoder = TabularSeqEncoder(nfield, nfeat, nemb, alpha, nhid, nquery, dropout)
-            # TODO: introduce an MLP for reduction
+            self.tabular_encoder = TabularSeqEncoder(nfield, nfeat+1, nemb, alpha, nhid, nquery, dropout)
+            # TODO: introduce an MLP for reduction (instead of mean-reduce)
             classifier_ndim += nemb
-        self.classifier = MLP(classifier_ndim, nlayers=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=nevent)
+        self.classifier = MLP(classifier_ndim, nlayers=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=2)
 
     def forward(self, features) -> Tensor:
         """
-        :param features:    [sequential, quantitative, semantic, tabular], each of [nwindow, *], LongTensor
-        :return:            [nwindow, nevent], FloatTensor, prediction of next eventID
+        :param features:    [sequential, quantitative, semantic, tabular], each of [bsz, *], LongTensor/FloatTensor
+        :return:            [bsz, nevent], FloatTensor, anomaly prediction
         """
         deep_features = []
+        if 'seq_len' in features:
+            seq_len, seq_idx = features['seq_len'], \
+                               range(features['seq_len'].size(0))   # bsz
         if self.use_sequential:
-            sequential = features['sequential']                     # nwindow*nstep
-            sequential = self.sequential_embedding(sequential)      # nwindow*nstep*nemb
-            sequential, _ = self.sequential_lstm(sequential)        # nwindow*nstep*nhid
-            deep_features.append(sequential[:, -1])                 # nwindow*nhid
+            sequential = features['sequential']                     # bsz*max_len
+            sequential = sequential + 1                             # bsz*max_len, all EventID+1, padding -1 to 0
+            sequential = self.sequential_embedding(sequential)      # bsz*max_len*nemb
+            sequential, _ = self.sequential_lstm(sequential)        # bsz*max_len*nhid
+            deep_features.append(sequential[seq_idx, seq_len-1])    # bsz*nhid, index h by each seq_len
         if self.use_quantitative:
-            quantitative = features['quantitative'].float()         # nwindow*nevent
-            quantitative = self.quantitative_mlp(quantitative)      # nwindow*nhid
-            deep_features.append(quantitative)                      # nwindow*nhid
+            quantitative = features['quantitative'].float()         # bsz*nevent
+            quantitative = self.quantitative_mlp(quantitative)      # bsz*nhid
+            deep_features.append(quantitative)                      # bsz*nhid
         if self.use_semantic:
-            semantic = features['semantic']                         # nwindow*nstep*E_nemb
-            semantic, _ = self.semantic_lstm(semantic)              # nwindow*nstep*nhid
-            deep_features.append(semantic[:, -1])                   # nwindow*nhid
+            semantic = features['semantic']                         # bsz*max_len*E_nemb
+            semantic, _ = self.semantic_lstm(semantic)              # bsz*max_len*nhid
+            deep_features.append(semantic[seq_idx, seq_len-1])      # bsz*nhid, index h by each seq_len
         if self.use_tabular:
-            tabular = features['tabular']                           # nwindow*nstep*nfield
-            tabular = self.tabular_encoder(tabular)                 # nwindow*nquery*nemb
-            tabular = reduce(tabular, 'b q e -> b e', 'mean')       # nwindow*nemb
-            deep_features.append(tabular)                           # nwindow*nemb
+            tabular = features['tabular']                           # bsz*max_len*nfield
+            tabular = tabular + 1                                   # bsz*max_len*nfield, all EventID+1, padding -1 to 0
+            tabular = self.tabular_encoder(tabular, seq_len)        # bsz*nquery*nemb
+            tabular = reduce(tabular, 'b q e -> b e', 'mean')       # bsz*nemb
+            deep_features.append(tabular)                           # bsz*nemb
 
-        deep_features = torch.cat(deep_features, dim=1)             # nwindow*classifier_ndim
-        return self.classifier(deep_features)                       # nwindow*nevent
+        deep_features = torch.cat(deep_features, dim=1)             # bsz*classifier_ndim
+        return self.classifier(deep_features)                       # bsz*2

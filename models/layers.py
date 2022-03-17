@@ -1,5 +1,7 @@
 import math
-from einops import rearrange
+
+import numpy as np
+from einops import rearrange, repeat
 
 import torch
 import torch.nn as nn
@@ -34,26 +36,30 @@ class Attention(nn.Module):
         self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias=False)
         self.to_out = nn.Linear(inner_dim, query_dim)
 
-    def forward(self, q, context=None):
+    def forward(self, q, context=None, mask=None):
         """
         :param q:           [bsz, nhid_q, d_q], FloatTensor
         :param context:     [bsz, nhid_k, d_k], FloatTensor
+        :param mask:        [bsz, nhid_k/nhid_q], BoolTensor -> cross-attn/self-attn
         :return:            [bsz, nhid_q, d_q], FloatTensor
         """
         h = self.heads
 
-        q = self.to_q(q)
-        context = default(context, q)
-        k, v = self.to_kv(context).chunk(2, dim=-1)
+        q = self.to_q(q)                                                # bsz*nhid_q*(nhead*dim_haed)
+        context = default(context, q)                                   # bsz*[nhid_k*d_k/nhid_q*d_q]
+        k, v = self.to_kv(context).chunk(2, dim=-1)                     # bsz*[nhid_k/nhid_q]*(nhead*dim_head)
 
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
 
-        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
-        attn = sim.softmax(dim=-1)
+        attn = einsum('b i d, b j d -> b i j', q, k) * self.scale       # (bsz*nhead)*nhid_q*[nhid_k/nhid_q]
+        if mask is not None:
+            mask = repeat(mask, 'b j -> (b h) i j', h=h, i=q.size(1))   # (bsz*nhead)*nhid_q*[nhid_k/nhid_q]
+            attn = attn.masked_fill(mask, -np.inf)                      # (bsz*nhead)*nhid_q*[nhid_k/nhid_q]
+        attn = attn.softmax(dim=-1)                                     # (bsz*nhead)*nhid_q*[nhid_k/nhid_q]
 
-        out = einsum('b i j, b j d -> b i d', attn, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
-        return self.to_out(out)
+        out = einsum('b i j, b j d -> b i d', attn, v)                  # (bsz*nhead)*nhid_q*dim_head
+        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)             # bsz*nhid_q*(nhead*dim_head)
+        return self.to_out(out)                                         # bsz*nhid_q*d_q
 
 
 class MLP(nn.Module):
