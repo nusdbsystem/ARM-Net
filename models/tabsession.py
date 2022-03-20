@@ -16,7 +16,7 @@ class TabularSeqEncoder(nn.Module):
         self.arm = ARMModule(nfield, nemb, nemb, alpha, nhid)
         # cross-attn for querying all logs across time
         # TODO: ablation study - positional encoding
-        self.pos_enc = PositionalEncoding(nemb, dropout=dropout)
+        self.positional_encoding = PositionalEncoding(nemb, dropout=dropout)
         self.query = nn.Parameter(torch.randn(nquery, nemb))
         self.seq_query = Attention(query_dim=nemb, context_dim=nemb, heads=8, dim_head=nemb)
 
@@ -33,7 +33,7 @@ class TabularSeqEncoder(nn.Module):
         x = self.arm(x)                                                 # (bsz*max_len)*nhid*nemb
         x = reduce(x, '(b t) h e -> b t e', 'mean', b=bsz)              # bsz*max_len*nemb
         # positional encoding
-        x = self.pos_enc(x)                                             # bsz*max_len*nemb
+        x = self.positional_encoding(x)                                 # bsz*max_len*nemb
         # cross-attn
         mask = torch.zeros((x.size(0), x.size(1)),
                            dtype=torch.bool, device=x.device)           # bsz*max_len
@@ -87,7 +87,7 @@ class TabSession(nn.Module):
     def forward(self, features) -> Tensor:
         """
         :param features:    [sequential, quantitative, semantic, tabular], each of [bsz, *], LongTensor/FloatTensor
-        :return:            [bsz, nevent], FloatTensor, anomaly prediction
+        :return:            [bsz, 2-nclass], FloatTensor, anomaly prediction
         """
         deep_features = []
         if 'seq_len' in features:

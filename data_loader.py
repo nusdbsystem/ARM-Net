@@ -41,10 +41,10 @@ def decode_feature_code(feature_code: int) -> [bool, bool, bool, bool]:
 
 
 def decode_shuffle_code(shuffle_code: int) -> [bool, bool]:
-    # shuffle_code:    [whole dataset, valid+test set] <-> [0/1][0/1]
+    # shuffle_code:    [whole dataset, valid+test set] <-> [0/1][0/1], (for iid train/valid/test)
     assert 0 <= shuffle_code <= 3, f'legal shuffle code 0~3 (00~11)'
-    dataset_shuffle, test_set_shuffle = shuffle_code >> 1 & 1, shuffle_code & 1
-    return dataset_shuffle, test_set_shuffle
+    shuffle_dataset, shuffle_testset = shuffle_code >> 1 & 1, shuffle_code & 1
+    return shuffle_dataset, shuffle_testset
 
 
 class LogDataset(Dataset):
@@ -238,7 +238,7 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
     :param vocab_sizes:     vocabulary size
     :param session_based:   whether session-based or window-based
     :param feature_code:    see LogDataset.__init__
-    :param shuffle:         whether to shuffle the whole dataset
+    :param shuffle:         whether to shuffle the whole dataset and the test set
     :param only_normal:     whether to use only normal log sequences for training
     :param valid_perc:      valid set percentage (over test set)
     :param test_perc:       test set percentage (over whole dataset)
@@ -253,8 +253,8 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
         event_emb_map = pickle.load(data_file)
 
     # whether to shuffle data to make it i.i.d. (data leak to train set)
-    dataset_shuffle, test_set_shuffle = decode_shuffle_code(shuffle)
-    if dataset_shuffle: random.shuffle(data)
+    shuffle_dataset, shuffle_testset = decode_shuffle_code(shuffle)
+    if shuffle_dataset: random.shuffle(data)
 
     ntrain_sample, nvalid_sample = int(len(data)*(1-test_perc)), int(len(data)*test_perc*valid_perc)
     train_data, test_data = data[:ntrain_sample], data[ntrain_sample:]
@@ -263,7 +263,7 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
         train_data = list(filter(lambda log_seq: log_seq[1] == 0, train_data))
         ntrain_sample = len(train_data)
     nsample_per_env = ntrain_sample//nenv
-    if test_set_shuffle: random.shuffle(test_data)
+    if shuffle_testset: random.shuffle(test_data)
 
     # split env sequentially (across time)
     train_loaders = [_loader(train_data[env_idx*nsample_per_env:(env_idx+1)*nsample_per_env],

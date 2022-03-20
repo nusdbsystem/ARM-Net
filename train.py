@@ -5,7 +5,6 @@ from typing import Tuple
 
 import torch
 from torch import nn
-import torch.backends.cudnn as cudnn
 from torch import optim
 
 from data_loader import log_loader, get_vocab_size
@@ -92,7 +91,6 @@ def main():
     # gradient clipping
     for p in model.parameters():
         p.register_hook(lambda grad: torch.clamp(grad, -1., 1.))
-    cudnn.benchmark = True
 
     patience_cnt = 0
     for epoch in range(args.epoch):
@@ -107,14 +105,15 @@ def main():
         # record best f1 and save checkpoint
         if valid_f1 > best_valid_f1:
             patience_cnt = 0
-            best_valid_f1, best_test_f1 = valid_f1, test_f1
+            best_valid_f1, best_test_f1, best_precision, best_recall = valid_f1, test_f1, test_precidion, test_recall
             plogger.info(f'best test: valid {valid_f1:.4f}, test {test_f1:.4f}')
         else:
             patience_cnt += 1
             plogger.info(f'valid {valid_f1:.4f}, test {test_f1:.4f}')
             plogger.info(f'Early stopped, {patience_cnt}-th best f1 at epoch {epoch-1}')
         if patience_cnt >= args.patience:
-            plogger.info(f'Final best valid f1 {best_valid_f1:.4f}, with test f1 {best_test_f1:.4f}')
+            plogger.info(f'Final best valid f1 {best_valid_f1:.4f}, with test precision {best_precision:.4f} '
+                         f'recall {best_recall:.4f} f1 {best_test_f1:.4f}')
             break
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
