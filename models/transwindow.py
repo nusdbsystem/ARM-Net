@@ -31,7 +31,7 @@ class TransWindow(torch.nn.Module):
         encoder_layer = TransformerEncoderLayer(d_model=nemb, nhead=nhead, dim_feedforward=dim_feedforward,
                                                 dropout=dropout, batch_first=True)
         self.transformer = TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.classifier = MLP(nemb, nlayers=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=nevent)
+        self.classifier = MLP(nemb, nlayer=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=nevent)
 
     def forward(self, features):
         """

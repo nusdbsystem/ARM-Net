@@ -66,10 +66,12 @@ def get_args():
     parser.add_argument('--test_perc', default=0.5, type=float, help='train/test data split perc among all data')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='valid data split over test set')
     parser.add_argument('--nworker', default=0, type=int, help='number of data loading workers')
+    parser.add_argument('--session_len', type=int, default=100, help='number of logs per session (for bgl dataset)')
+    parser.add_argument('--step_size', type=int, default=10, help='number of logs to skip for the next session (bgl)')
     # 4. evaluation metric
     parser.add_argument('--topk', default=9, type=int, help='number of top candidate events for anomaly detection')
     # 5. log & checkpoint
-    parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
+    parser.add_argument('--log_dir', type=str, default='./log/', help='path to store log')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2022, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=5, help='number of repeats with seeds [seed, seed+repeat)')
@@ -162,8 +164,10 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
             pred_label = batch['label']                                             # bsz
 
         accuracy_avg.update(correct_to_acc(correct), batch['pred_label'].size(0))
-        all_pred.append(pred)                                                       # bsz or (nwindow, bsz)
-        all_label.append(pred_label)                                                # bsz or (nwindow, bsz)
+        if pred.ndim == 2:                                                          # reduce memory usage - window-based
+            pred = pred.argmax(dim=1)                                               # nwindow*nevent -> nwindow
+        all_pred.append(pred.cpu())                                                 # bsz or nwindow
+        all_label.append(pred_label.cpu())                                          # bsz or nwindow
 
         time_avg.update(time.time() - timestamp); timestamp = time.time()
         if batch_idx % args.report_freq == 0:
@@ -181,7 +185,8 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
 train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.session_based,
-    args.feature_code, args.shuffle, args.only_normal, args.valid_perc, args.test_perc, args.nenv, args.bsz, args.nworker)
+  args.feature_code, args.shuffle, args.only_normal, args.valid_perc, args.test_perc, args.nenv,
+  args.session_len, args.step_size, args.bsz, args.nworker)
 start_time, best_valid_f1, base_exp_name = time.time(), -100., args.exp_name
 for args.seed in range(args.seed, args.seed+args.repeat):
     seed_everything(args.seed)

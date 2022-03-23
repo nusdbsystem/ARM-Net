@@ -1,6 +1,5 @@
 from tqdm import tqdm
 import pickle
-import numpy as np
 from typing import Tuple, List, Dict, Union
 from collections import Counter, defaultdict
 import random
@@ -11,11 +10,13 @@ from torch.utils.data import Dataset, DataLoader
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # dataset META info
+## [hour, minute, second, pid, level, component, eventID]
 __HDFS_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 27799, 2, 9, 48])
-__BGL_vocab_sizes__: LongTensor = LongTensor([69251, 24, 60, 60, 100, 6, 14, 10, 648+359228+156004])
+## [hour, minute, second, millisecond, node, type, component, level, eventID]
+__BGL_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 101, 69252, 3, 11, 7, 1845])
 vocab_size_map: Dict[str, LongTensor] = {
     'hdfs': __HDFS_vocab_sizes__,
-    'bgl': __BGL_vocab_sizes__
+    'bgl': __BGL_vocab_sizes__,
 }
 # format: {eventID; [float]*300}; event embeddings from event NLP preprocessing
 event_emb_map = {}
@@ -27,6 +28,9 @@ def get_vocab_size(dataset: str, tabular_cap: int) -> LongTensor:
     if dataset == 'hdfs':
         # pid cap for hdfs dataset
         vocab_sizes[3] = tabular_cap
+    elif dataset == 'bgl':
+        # node cap for bgl dataset
+        vocab_sizes[4] = tabular_cap
     else:
         raise NotImplementedError
     return vocab_sizes
@@ -48,12 +52,14 @@ def decode_shuffle_code(shuffle_code: int) -> [bool, bool]:
 
 
 class LogDataset(Dataset):
-    """ Dataset for Log Data (EventID in the last Field) """
-    def __init__(self, data: Union[list, np.ndarray], nstep: int, vocab_sizes: LongTensor,
+    """
+        Dataset for Log Data (EventID in the last Field)
+            dataset format: [log_seq: [[int]*nfield]*nlog, log_seq_label: int]*nsession
+    """
+    def __init__(self, data: List[Tuple[list, int]], nstep: int, vocab_sizes: LongTensor,
                  session_based: bool, feature_code: int):
         self.nfield, self.nstep, self.nsample = vocab_sizes.size(0), nstep, len(data)
         self.session_based, self.nevent = session_based, vocab_sizes[-1]
-        # data sample format: [log_seq: [[int]*nfield]*nlog, log_seq_label: int]
         assert (self.nfield == len(data[0][0][0])), \
             f"vocab_sizes field {self.nfield} and data fields {len(data[0][0][0])} not match"
         self.use_sequential, self.use_quantitative, self.use_semantic, self.use_tabular = \
@@ -63,10 +69,9 @@ class LogDataset(Dataset):
         offsets[1:] = torch.cumsum(vocab_sizes, dim=0)[:-1]
         self.event_offset = offsets[-1]
 
-        print(f'===>>> processing {self.nsample} logs ...')
         # tabular & label
         self.tabular = []
-        self.y = LongTensor(self.nsample)                                               # nsample
+        self.y, nanomaly = LongTensor(self.nsample), 0                                  # nsample
         with tqdm(total=self.nsample) as pbar:
             for sample_idx in range(self.nsample):
                 # tabular
@@ -80,8 +85,10 @@ class LogDataset(Dataset):
                 self.tabular.append(log_seq)
                 # label
                 self.y[sample_idx] = data[sample_idx][1]
+                nanomaly += data[sample_idx][1]
                 # update progress bar
                 pbar.update(1)
+        print(f'===>>> {self.nsample} sessions in total, {nanomaly} anomalies ({100.*nanomaly/self.nsample:.4f}%)')
 
     def __len__(self):
         return self.nsample
@@ -167,6 +174,7 @@ class LogDataset(Dataset):
                 batchfied_features['tabular'] = torch.stack(tabular, dim=0)             # nwindoe*nstep*nfield
         if self.use_quantitative:
             batchfied_features['quantitative'] = torch.stack(quantitative, dim=0)       # bsz/nwindow*nfield
+
         return batchfied_features
 
     def cuda(self, batch: Dict[str, Union[Tensor, Dict]]) -> Dict[str, Union[Tensor, Dict]]:
@@ -221,7 +229,8 @@ class LogDataset(Dataset):
             batch['label'] = torch.stack(label, dim=0).long()                           # bsz
         return self.cuda(batch)
 
-def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
+
+def _loader(data: List[Tuple[list, int]], nstep: int, vocab_sizes: LongTensor,
             session_based: bool, feature_code: int, bsz: int, nworker: int) -> DataLoader:
     dataset = LogDataset(data, nstep, vocab_sizes, session_based, feature_code)
     data_loader = DataLoader(dataset, batch_size=bsz, shuffle=True, drop_last=True,
@@ -229,9 +238,35 @@ def _loader(data: np.ndarray, nstep: int, vocab_sizes: LongTensor,
     return data_loader
 
 
+def log_sequence_to_sessions(data: Union[Tuple[list, list], List[Tuple[list, int]]],
+                             session_len: int, step_size: int) -> List[Tuple[list, int]]:
+    """
+        Convert a labeled log sequence into Sessions (EventID in the last Field) 
+            dataset format: [log_seq: [[int]*nfield]*nlog, log_seq_labels: [int]*nlog]
+                -> [log_seq: [[int]*nfield]*session_size, log_seq_label: int]*nsession
+    :param data:            dataset
+    :param session_len:     Number of logs per session
+    :param step_size:       NUmber of logs to forward each session, default 1
+    :return:                List of Sessions with labels, in the HDFS format (see LogDataset)
+    """
+    # if data is a log sequence, convert it into session-based data, else do nothing
+    if len(data) > 2: return data
+    log_seq, label = data[0], data[1]                                       # nlog
+    log_idx, nlogs, session = 0, len(label), []
+    while log_idx + session_len <= nlogs:
+        session_tabular = log_seq[log_idx: log_idx + session_len]           # [[int]*nfield]*session_size
+        session_label = sum(label[log_idx: log_idx + session_len]) > 0      # 0
+        session.append((session_tabular, session_label))
+        log_idx += step_size
+    print(f'===>>> {nlogs} logs converted into {(nlogs-session_len)//step_size+1} sessions '
+          f'(session_len-{session_len}, step_size-{step_size}).')
+    return session
+
+
 def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_based: bool, feature_code: int,
                shuffle: int, only_normal: bool, valid_perc: float, test_perc: float, nenv: int,
-               bsz: int, nworker: int) -> Tuple[List[DataLoader], DataLoader, DataLoader]:
+               session_len: int, step_size: int, bsz: int, nworker: int) \
+        -> Tuple[List[DataLoader], DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
     :param nstep:           window size (number of window time step)
@@ -243,6 +278,8 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
     :param valid_perc:      valid set percentage (over test set)
     :param test_perc:       test set percentage (over whole dataset)
     :param nenv:            number of training environments
+    :param session_len:     number of logs per session (for bgl dataset)
+    :param step_size:       number of logs to skip for the next session (bgl)
     :param bsz:             batch size
     :param nworker:         number of data_loader workers
     :return:                train*nenv/valid/test data loader
@@ -251,6 +288,7 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
         data = pickle.load(data_file)
         global event_emb_map
         event_emb_map = pickle.load(data_file)
+        data = log_sequence_to_sessions(data, session_len, step_size)
 
     # whether to shuffle data to make it i.i.d. (data leak to train set)
     shuffle_dataset, shuffle_testset = decode_shuffle_code(shuffle)

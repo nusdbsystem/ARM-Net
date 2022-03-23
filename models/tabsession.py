@@ -82,7 +82,7 @@ class TabSession(nn.Module):
             self.tabular_encoder = TabularSeqEncoder(nfield, nfeat+1, nemb, alpha, nhid, nquery, dropout)
             # TODO: introduce an MLP for reduction (instead of mean-reduce)
             classifier_ndim += nemb
-        self.classifier = MLP(classifier_ndim, nlayers=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=2)
+        self.classifier = MLP(classifier_ndim, nlayer=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=2)
 
     def forward(self, features) -> Tensor:
         """

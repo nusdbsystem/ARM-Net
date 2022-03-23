@@ -16,7 +16,7 @@ class TabularSeqEncoder(nn.Module):
         self.arm = ARMModule(nfield, nemb, nemb, alpha, nhid)
         # cross-attn for querying all logs across time
         # TODO: ablation study - positional encoding
-        self.pos_enc = PositionalEncoding(nemb, dropout=dropout)
+        self.positional_encoding = PositionalEncoding(nemb, dropout=dropout)
         self.query = nn.Parameter(torch.randn(nquery, nemb))
         self.seq_query = Attention(query_dim=nemb, context_dim=nemb, heads=8, dim_head=nemb)
 
@@ -32,7 +32,7 @@ class TabularSeqEncoder(nn.Module):
         x = self.arm(x)                                             # (nwindow*nstep)*nhid*nemb
         x = reduce(x, '(b t) h e -> b t e', 'mean', b=nwindow)      # nwindow*nstep*nemb
         # positional encoding
-        x = self.pos_enc(x)                                         # nwindow*nstep*nemb
+        x = self.positional_encoding(x)                             # nwindow*nstep*nemb
         # cross-attn
         query = repeat(self.query, 'q e -> b q e', b=nwindow)       # nwindow*nquery*nemb
         x = self.seq_query(query, context=x)                        # nwindow*nquery*nemb
@@ -77,7 +77,7 @@ class TabWindow(nn.Module):
             self.tabular_encoder = TabularSeqEncoder(nfield, nfeat, nemb, alpha, nhid, nquery, dropout)
             # TODO: introduce an MLP for reduction (instead of mean-reduce)
             classifier_ndim += nemb
-        self.classifier = MLP(classifier_ndim, nlayers=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=nevent)
+        self.classifier = MLP(classifier_ndim, nlayer=mlp_nlayer, nhid=mlp_nhid, dropout=dropout, noutput=nevent)
 
     def forward(self, features) -> Tensor:
         """
