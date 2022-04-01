@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
-from models.layers import PositionalEncoding, MLP
+from models.layers import MLP, PositionalEncoding
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 
 class TransSession(torch.nn.Module):
     """
-        Model:  LogTransformer Model (session-based; [sequential])
+        Model:  TransformerLog Model (session-based; [sequential])
         Reference:  https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
     """
     def __init__(self, nevent: int, nemb: int, nhead: int = 8, num_layers: int = 6,
@@ -22,10 +22,9 @@ class TransSession(torch.nn.Module):
         :param mlp_nhid:            FFN dimention for next event prediction
         """
         super().__init__()
-        # event embedding & positional encoding
-        # TODO: class embedding for aggregating seq info
+        # event embedding & positional encoding/embedding
         self.event_embedding = nn.Embedding(nevent+1, nemb)
-        self.pos_enc = PositionalEncoding(nemb, dropout=dropout)
+        self.positinoal_embedding = PositionalEncoding(nemb, dropout=dropout)
         # transformer
         encoder_layer = TransformerEncoderLayer(d_model=nemb, nhead=nhead, dim_feedforward=dim_feedforward,
                                                 dropout=dropout, batch_first=True)
@@ -41,7 +40,8 @@ class TransSession(torch.nn.Module):
         sequential = sequential + 1                                         # bsz*max_len
         seq_len = features['seq_len']                                       # bsz
         bsz, max_len = sequential.size()
-        sequential = self.pos_enc(self.event_embedding(sequential))         # bsz*max_len*nemb
+        sequential = self.positinoal_embedding(
+            self.event_embedding(sequential))                               # bsz*max_len*nemb
         # src_key_padding_mask for TransformerEncoder
         mask = torch.zeros((bsz, max_len),
                            dtype=torch.bool, device=sequential.device)      # bsz*max_len

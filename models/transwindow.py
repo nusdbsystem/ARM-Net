@@ -7,7 +7,7 @@ from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 class TransWindow(torch.nn.Module):
     """
-        Model:  LogTransformer Model (window-based; [sequential])
+        Model:  TransformerLog Model (window-based; [sequential])
         Reference:  https://proceedings.neurips.cc/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
     """
     def __init__(self, nevent: int, nemb: int, nhead: int = 8, num_layers: int = 6,

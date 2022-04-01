@@ -112,6 +112,23 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
+class PositionalEmbedding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEmbedding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        self.positional_embedding = nn.Embedding(max_len, d_model)
+
+    def forward(self, x):
+        """
+        :param x:   [*, x_len, d_model], FloatTensor
+        :return:    [*, x_len, d_model], FloatTensor
+        """
+        positional_embedding = self.positional_embedding(
+            torch.arange(x.size(-2), device=x.device))                          # [x_len, d_model]
+        x = x + positional_embedding                                            # [*, x_len, d_model]
+        return self.dropout(x)
+
+
 class TCN(nn.Module):
     """ Temporal Convolution Network """
     def __init__(self, nemb: int, nlayer: int = 2,
@@ -144,13 +161,10 @@ class TCN(nn.Module):
         """
         for idx in range(self.nlayer):
             residual = self.residual_convs[idx](x)          # bsz*nemb*seq_len
-
             # left pad x to keep constant seq_len
             x = F.pad(x, [self.kernel_size-1, 0])           # bsz*nemb*(seq_len+ksz-1)
             filter = torch.tanh(self.filter_convs[idx](x))  # bsz*nemb*seq_len
             gate = torch.sigmoid(self.gate_convs[idx](x))   # bsz*nemb*seq_len
             x = filter * gate                               # bsz*nemb*seq_len
-
             x += residual                                   # bsz*nemb*seq_len
-
         return x                                            # bsz*nemb*seq_len

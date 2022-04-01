@@ -135,6 +135,7 @@ def is_log_seq_anomaly(event_acc: LongTensor, nsamples: LongTensor) -> LongTenso
     :return:            [bsz], LongTensor, whether log seq is anomaly
     '''
     pos, bsz = 0, nsamples.size(0)
+    event_acc = event_acc.bool()
     log_acc = torch.ones(bsz).long().to(nsamples.device)    # bsz
     for log_idx in range(bsz):
         log_pred = event_acc[pos: pos+nsamples[log_idx]]    # n_i

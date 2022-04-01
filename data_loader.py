@@ -12,8 +12,8 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 # dataset META info
 ## [hour, minute, second, pid, level, component, eventID]
 __HDFS_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 27799, 2, 9, 48])
-## [hour, minute, second, millisecond, node, type, component, level, eventID]
-__BGL_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 101, 69252, 3, 11, 7, 1845])
+## [hour, minute, second, millisecond, node-cap_at_100, type, component, level, eventID]
+__BGL_vocab_sizes__: LongTensor = LongTensor([24, 60, 60, 101, 100, 3, 11, 7, 1845])
 vocab_size_map: Dict[str, LongTensor] = {
     'hdfs': __HDFS_vocab_sizes__,
     'bgl': __BGL_vocab_sizes__,
@@ -29,8 +29,8 @@ def get_vocab_size(dataset: str, tabular_cap: int) -> LongTensor:
         # pid cap for hdfs dataset
         vocab_sizes[3] = tabular_cap
     elif dataset == 'bgl':
-        # node cap for bgl dataset
-        vocab_sizes[4] = tabular_cap
+        # nevent cap for bgl dataset
+        vocab_sizes[-1] = tabular_cap
     else:
         raise NotImplementedError
     return vocab_sizes
@@ -171,7 +171,7 @@ class LogDataset(Dataset):
             if self.use_semantic:
                 batchfied_features['semantic'] = torch.stack(semantic, dim=0)           # nwindow*nstep*nemb
             if self.use_tabular:
-                batchfied_features['tabular'] = torch.stack(tabular, dim=0)             # nwindoe*nstep*nfield
+                batchfied_features['tabular'] = torch.stack(tabular, dim=0)             # nwindow*nstep*nfield
         if self.use_quantitative:
             batchfied_features['quantitative'] = torch.stack(quantitative, dim=0)       # bsz/nwindow*nfield
 

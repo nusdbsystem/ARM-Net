@@ -13,14 +13,13 @@ from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
 from models.utils import create_model, update_default_config
 from optimizer.irm import IRM
 from optimizer.randomizer import Randomizer
-from optimizer.reptile import Reptile
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Log-Based Anomaly Detection')
     parser.add_argument('--exp_name', default='test', type=str, help='exp name for log & checkpoint')
     # 1. model config
-    parser.add_argument('--model', default='armnet', type=str, help='model name')
+    parser.add_argument('--model', default='tabsession', type=str, help='model name')
     parser.add_argument('--nstep', type=int, default=10, help='number of log events per sequence')
     parser.add_argument('--tabular_cap', type=int, default=100, help='feature cap for tabular data, e.g., pid in HDFS')
     parser.add_argument('--dropout', default=0.0, type=float, help='dropout rate')
@@ -32,7 +31,7 @@ def get_args():
     parser.add_argument('--nquery', type=int, default=8, help='number of output query vectors for each step')
     ## 1.2 log sequence
     parser.add_argument('--nhead', type=int, default=8, help='attention head per layer for log seq encoder')
-    parser.add_argument('--nlayer', type=int, default=6, help='number of layers for log seq encoder')
+    parser.add_argument('--nlayer', type=int, default=2, help='number of layers for log seq encoder')
     parser.add_argument('--dim_feedforward', type=int, default=256, help='FFN dimension for log seq encoder')
     ## 1.3 predictor
     parser.add_argument('--mlp_nlayer', type=int, default=2, help='number of layers for MLP predictor')
@@ -42,23 +41,18 @@ def get_args():
     parser.add_argument('--patience', type=int, default=1, help='number of epochs for early stopping training')
     parser.add_argument('--bsz', type=int, default=256, help='batch size')
     parser.add_argument('--lr', default=3e-4, type=float, help='learning rate, default 3e-4')
-    parser.add_argument('--eval_freq', type=int, default=10000, help='max number of batches to train per epoch')
+    parser.add_argument('--eval_freq', type=int, default=1500, help='max number of training batches per epoch')
     parser.add_argument('--nenv', type=int, default=1, help='number of training environments')
-    parser.add_argument('--rand_type', type=int, default=0, help='data type random type')
+    parser.add_argument('--rand_type', type=int, default=1, help='data type random type, see Randomizer.data_generator')
     # 2.0 env-generalization
     parser.add_argument('--lambda_p', default=3e-2, type=float, help='lambda for IRM/Reptile penalty, default 3e-2')
     # 2.1 irm
     parser.add_argument("--irm", action="store_true", default=False, help="whether to use irm for DG")
-    # 2.2 meta-learning-reptile
-    parser.add_argument("--reptile", action="store_true", default=False, help="whether to use reptile for DG")
-    parser.add_argument('--outer_iter', type=int, default=100, help='number of outer training iterations per epoch')
-    parser.add_argument('--inner_iter', type=int, default=3, help='number of inner training iterations')
-    parser.add_argument('--inner_lr', default=3e-4, type=float, help='inner training learning rate, default 3e-4')
     # 3. dataset
     parser.add_argument("--session_based", action="store_true", default=False, help="to use only session features")
     parser.add_argument('--feature_code', type=int, default=4, help='1~15, default quantitative, binary code for'
         '[sequential, quantitative, semantic, tabular] <-> [0/1][0/1][0/1][0/1] see data_loader.decode_feature_code')
-    parser.add_argument('--shuffle', type=int, default=0, help='0~3, default no shuffle, binary code for'
+    parser.add_argument('--shuffle', type=int, default=1, help='0~3, default no shuffle, binary code for'
         '[whole dataset, valid+test set] <-> [0/1][0/1] see data_loader.decode_shuffle_code/log_loader')
     parser.add_argument("--only_normal", action="store_true", default=False, help="only train using normal log seq")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
@@ -67,9 +61,9 @@ def get_args():
     parser.add_argument('--valid_perc', default=0.2, type=float, help='valid data split over test set')
     parser.add_argument('--nworker', default=0, type=int, help='number of data loading workers')
     parser.add_argument('--session_len', type=int, default=100, help='number of logs per session (for bgl dataset)')
-    parser.add_argument('--step_size', type=int, default=10, help='number of logs to skip for the next session (bgl)')
+    parser.add_argument('--step_size', type=int, default=20, help='number of logs to skip for the next session (bgl)')
     # 4. evaluation metric
-    parser.add_argument('--topk', default=9, type=int, help='number of top candidate events for anomaly detection')
+    parser.add_argument('--topk', default=10, type=int, help='number of top candidate events for anomaly detection')
     # 5. log & checkpoint
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to store log')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
@@ -99,8 +93,7 @@ def main():
         plogger.info(f'Epoch [{epoch:3d}/{args.epoch:3d}]')
 
         # train and eval
-        if args.reptile: Reptile.meta_train(args, epoch, model, train_loaders.copy(), opt_metric, plogger, optimizer)
-        else: run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
+        run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
         valid_precision, valid_recall, valid_f1 = run(epoch, model, [valid_loader], opt_metric, plogger, namespace='val')
         test_precidion, test_recall, test_f1 = run(epoch, model, [test_loader], opt_metric, plogger, namespace='test')
 

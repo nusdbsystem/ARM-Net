@@ -7,7 +7,7 @@ import torch.nn as nn
 
 class LogAnomaly(torch.nn.Module):
     """
-        Model:  LogAnomaly Model (window-based; [sequential, quantative])
+        Model:  LogAnomaly Model (window-based; [sequential, quantative], original implementation nemb=1)
         Reference:  https://www.ijcai.org/proceedings/2019/0658.pdf
                     https://github.com/donglee-afar/logdeep (wrong implementation, correct one refers to the link below)
         https://github.com/nusdbsystem/ARM-Net/blob/53975c8d1b5378cc997a40f0dfd136d1863a3b8f/models/loganomaly.py

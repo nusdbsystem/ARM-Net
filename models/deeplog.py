@@ -5,7 +5,7 @@ from einops.layers.torch import Rearrange
 
 class DeepLog(torch.nn.Module):
     """
-        Model:  DeepLog Model (window-based; [sequential])
+        Model:  DeepLog Model (window-based; [sequential], original implementation nemb=1)
         Reference:  https://www.cs.utah.edu/~lifeifei/papers/deeplog.pdf
                     https://github.com/donglee-afar/logdeep
     """

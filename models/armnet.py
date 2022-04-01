@@ -34,13 +34,12 @@ class SparseAttention(nn.Module):
 
 class ARMModule(nn.Module):
     """
-    Model:  Adaptive Relation Modeling Network (w/o bilinear weight => One-Head, no position)
+    Model:      Adaptive Relation Modeling Network (w/o bilinear weight => One-Head, no position)
+    Reference:  https://dl.acm.org/doi/10.1145/3448016.3457321
     """
 
     def __init__(self, nfield: int, nemb: int, d_k: int, alpha: float, nhid: int):
         super().__init__()
-
-        # arm
         self.attn_layer = SparseAttention(nfield, d_k, nhid, nemb, alpha)
         self.bn = nn.BatchNorm1d(nhid)
 
