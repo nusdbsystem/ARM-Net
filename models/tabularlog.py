@@ -64,4 +64,6 @@ class TabularLog(nn.Module):
         query = repeat(self.query, 'q e -> b q e', b=bsz)                   # bsz*nquery*nemb
         seq_feature = self.cross_attn(query, context=tabular, mask=mask)    # bsz*nquery*nemb
         seq_feature = reduce(seq_feature, 'b q e -> b e', 'mean')           # bsz*nemb
+        if not self.training:
+            self.representation = seq_feature.detach()                      # for representation visualization
         return self.classifier(seq_feature)                                 # bsz*noutput

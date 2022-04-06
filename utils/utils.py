@@ -8,7 +8,7 @@ import shutil
 from typing import Tuple
 import random
 import numpy as np
-from torch import FloatTensor, LongTensor, Tensor
+from torch import nn, FloatTensor, LongTensor, Tensor
 import torch.backends.cudnn as cudnn
 
 
@@ -196,3 +196,17 @@ def seed_everything(seed=2022):
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = False
     cudnn.benchmark = False
+
+
+# update representations of the current batch
+def update_representation(current_representation: list, batch_representation: FloatTensor, label: LongTensor) -> list:
+    """
+    :param current_representation:  (emb: [float]*nemb, label: int) * N
+    :param batch_representation:    [bsz, nemb], FloatTensor
+    :param label:                   [bsz], LongTensor
+    :return:                        (emb: [float]*nemb, label: int) * (N+bsz)
+    """
+    batch_representation = batch_representation.cpu().clone()
+    for seq_idx in range(label.size(0)):
+        current_representation.append((batch_representation[seq_idx].tolist(), label[seq_idx].item(),))
+    return current_representation

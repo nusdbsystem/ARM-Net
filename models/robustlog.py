@@ -49,4 +49,6 @@ class RobustLog(torch.nn.Module):
         semantic = features['semantic']                     # bsz*max_len*nemb
         out, _ = self.lstm(semantic)                        # bsz*max_len*(D*nhid)
         out = self.attention(out, features['seq_len'])      # bsz*(D*nhid)
+        if not self.training:
+            self.representation = out.detach()              # for representation visualization
         return self.classifier(out)                         # bsz*noutput

@@ -2,6 +2,7 @@ import os
 import time
 import argparse
 from typing import Tuple
+import pickle
 
 import torch
 from torch import nn
@@ -9,7 +10,7 @@ from torch import optim
 
 from data_loader import log_loader, get_vocab_size
 from utils.utils import logger, remove_logger, AverageMeter, timeSince, seed_everything
-from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
+from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc, update_representation
 from models.utils import create_model, update_default_config
 from optimizer.irm import IRM
 from optimizer.randomizer import Randomizer
@@ -94,8 +95,10 @@ def main():
 
         # train and eval
         run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
-        valid_precision, valid_recall, valid_f1 = run(epoch, model, [valid_loader], opt_metric, plogger, namespace='val')
-        test_precidion, test_recall, test_f1 = run(epoch, model, [test_loader], opt_metric, plogger, namespace='test')
+        valid_precision, valid_recall, valid_f1 = \
+            run(epoch, model.module, [valid_loader], opt_metric, plogger, namespace='val')
+        test_precidion, test_recall, test_f1 = \
+            run(epoch, model.module, [test_loader], opt_metric, plogger, namespace='test')
 
         # record best f1 and save checkpoint
         if valid_f1 > best_valid_f1:
@@ -124,6 +127,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
     time_avg, loss_avg, accuracy_avg = AverageMeter(), AverageMeter(), AverageMeter()
     timestamp, precision, recall, f1, all_pred, all_label = time.time(), 0., 0., 0., [], []
     if args.irm: dummy_w = IRM.dummy_w.cuda()                                       # 1
+    current_representation = []
 
     loader = Randomizer.data_generator(data_loaders, args.rand_type, max_nbatch=args.eval_freq)
     for env_idx, batch_idx, batch in loader:
@@ -161,6 +165,9 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
             pred = pred.argmax(dim=1)                                               # nwindow*nevent -> nwindow
         all_pred.append(pred.cpu())                                                 # bsz or nwindow
         all_label.append(pred_label.cpu())                                          # bsz or nwindow
+        if namespace == 'test':
+            current_representation = update_representation(
+                current_representation, model.representation, pred_label)
 
         time_avg.update(time.time() - timestamp); timestamp = time.time()
         if batch_idx % args.report_freq == 0:
@@ -168,6 +175,9 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
                          f'{time_avg.val:.3f} ({time_avg.avg:.3f}) Acc {accuracy_avg.val:.3f} ({accuracy_avg.avg:.3f}) '
                          f'Loss {loss_avg.val:.4f} ({loss_avg.avg:.4f})')
 
+    if namespace == 'test':
+        global last_representation, representation
+        last_representation, representation = representation, current_representation
     precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_label))
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}  Accuracy {accuracy_avg.avg:.4f}  '
                  f'Precision {precision:.4f}  Recall {recall:.4f}  F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}\n')
@@ -176,6 +186,7 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 
 # initialize global variables, load dataset
 args = get_args()
+last_representation, representation = [], []
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
 train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.session_based,
   args.feature_code, args.shuffle, args.only_normal, args.valid_perc, args.test_perc, args.nenv,
@@ -188,3 +199,5 @@ for args.seed in range(args.seed, args.seed+args.repeat):
         os.makedirs(f'{args.log_dir}{args.exp_name}', exist_ok=True)
     main()
     start_time, best_valid_f1 = time.time(), -100.
+    with open(f'{args.log_dir}{args.exp_name}/representation.log', 'wb') as dump_file:
+        pickle.dump(last_representation, dump_file)
