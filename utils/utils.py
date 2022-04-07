@@ -1,14 +1,16 @@
 import os
-import torch
 import time
 import math
 import logging
 import sys
 import shutil
-from typing import Tuple
+from typing import Tuple, Set, List
 import random
 import numpy as np
-from torch import nn, FloatTensor, LongTensor, Tensor
+import itertools
+
+import torch
+from torch import FloatTensor, LongTensor, Tensor
 import torch.backends.cudnn as cudnn
 
 
@@ -210,3 +212,29 @@ def update_representation(current_representation: list, batch_representation: Fl
     for seq_idx in range(label.size(0)):
         current_representation.append((batch_representation[seq_idx].tolist(), label[seq_idx].item(),))
     return current_representation
+
+
+# obtain all tuples of field indexes given the number of fields (all and partial)
+def obtain_all_field_index(Nfield: int, nfield: int) -> Set[Tuple[int]]:
+    """
+    :param Nfield:      total number of fields
+    :param nfield:      number of fields to be used
+    :return:            set of all index tuples of 'nfield' fields
+    """
+    assert 1 <= nfield <= Nfield
+    all_index = set(itertools.combinations(range(Nfield), nfield))
+    return all_index
+
+
+# index certain fields of data given field index
+def index_data_field(data: List[Tuple[list, int]], field_idx: List[int]) -> List[Tuple[list, int]]:
+    """
+    :param data:        data format: [log_seq: [[int] * nfield] * nlog, log_seq_label: int]*nsession
+    :param field_idx:   list of field indexes
+    :return:            data
+    """
+    for seq_idx, session in enumerate(data):
+        log_seq = list(map(lambda fields: [fields[idx] for idx in field_idx], session[0]))
+        label = session[1]
+        data[seq_idx] = [log_seq, label]
+    return data

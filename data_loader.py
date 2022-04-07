@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, LongTensor, FloatTensor
 from torch.utils.data import Dataset, DataLoader
 torch.multiprocessing.set_sharing_strategy('file_system')
+from utils.utils import index_data_field
 
 # dataset META info
 ## [hour, minute, second, pid, level, component, eventID]
@@ -265,7 +266,7 @@ def log_sequence_to_sessions(data: Union[Tuple[list, list], List[Tuple[list, int
 
 def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_based: bool, feature_code: int,
                shuffle: int, only_normal: bool, valid_perc: float, test_perc: float, nenv: int,
-               session_len: int, step_size: int, bsz: int, nworker: int) \
+               session_len: int, step_size: int, bsz: int, nworker: int, field_idx: List[int] = None) \
         -> Tuple[List[DataLoader], DataLoader, DataLoader]:
     """
     :param data_path:       path to the pickled dataset
@@ -293,6 +294,11 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
     # whether to shuffle data to make it i.i.d. (data leak to train set)
     shuffle_dataset, shuffle_testset = decode_shuffle_code(shuffle)
     if shuffle_dataset: random.shuffle(data)
+
+    # whether to mask certain fields of data
+    if field_idx is not None:
+        vocab_sizes = vocab_sizes[field_idx]
+        data = index_data_field(data, field_idx)
 
     ntrain_sample, nvalid_sample = int(len(data)*(1-test_perc)), int(len(data)*test_perc*valid_perc)
     train_data, test_data = data[:ntrain_sample], data[ntrain_sample:]
