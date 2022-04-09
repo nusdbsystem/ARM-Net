@@ -13,12 +13,12 @@ class SparseAttention(nn.Module):
         self.scale = d_k ** -0.5
         self.w_k = nn.Linear(nemb, d_k, bias=False)                     # nemb*d_k
         self.query = nn.Parameter(torch.zeros(nhid, d_k))               # nhid*d_k
-        self.values = nn.Parameter(torch.zeros(nhid, nfield))           # nhid*nfield
+        self.value = nn.Parameter(torch.zeros(nhid, nfield))            # nhid*nfield
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
         nn.init.xavier_uniform_(self.query, gain=1.414)
-        nn.init.xavier_uniform_(self.values, gain=1.414)
+        nn.init.xavier_uniform_(self.value, gain=1.414)
 
     def forward(self, x):
         """
@@ -29,7 +29,7 @@ class SparseAttention(nn.Module):
         att_gates = torch.einsum('bfe,oe->bof',
                                  keys, self.query) * self.scale         # bsz*nhid*nfield
         sparse_gates = self.sparsemax(att_gates)                        # bsz*nhid*nfield
-        return torch.einsum('bof,of->bof', sparse_gates, self.values)   # bsz*nhid*nfield
+        return torch.einsum('bof,of->bof', sparse_gates, self.value)    # bsz*nhid*nfield
 
 
 class ARMModule(nn.Module):
@@ -48,7 +48,9 @@ class ARMModule(nn.Module):
         :param x:       [bsz, nfield, nemb], FloatTensor
         :return:        [bsz, nhid, nemb], FloatTensor
         """
-        att_weights = self.attn_layer(x)                                # bsz*nhid*nfield
+        att_weight = self.attn_layer(x)                                 # bsz*nhid*nfield
+        if not self.training:                                           # for tabular weight visualization
+            self.attn_weight = att_weight.detach()                      # bsz*nhid*nfield
         interaction = torch.exp(torch.einsum(
-            'bfe,bof->boe', x, att_weights))                            # bsz*nhid*nfield
+            'bfe,bof->boe', x, att_weight))                             # bsz*nhid*nfield
         return self.bn(interaction)                                     # bsz*nhid*nfield

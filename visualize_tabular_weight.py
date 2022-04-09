@@ -2,6 +2,8 @@ import os
 import time
 import argparse
 from typing import Tuple
+import pickle
+from einops import rearrange
 
 import torch
 from torch import nn
@@ -9,7 +11,7 @@ from torch import optim
 
 from data_loader import log_loader, get_vocab_size
 from utils.utils import logger, remove_logger, AverageMeter, timeSince, seed_everything
-from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc, obtain_all_field_index
+from utils.utils import f1_score, is_in_topk, is_log_seq_anomaly, correct_to_acc
 from models.utils import create_model, update_default_config
 from optimizer.irm import IRM
 from optimizer.randomizer import Randomizer
@@ -69,9 +71,7 @@ def get_args():
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2022, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
-    # 6. train with partial fields
-    parser.add_argument('--nfield', type=int, default=1, help='number of fields (exclude eventID) used in modeling')
-
+    parser.add_argument('--nbatch', type=int, default=20, help='number of samples to store')
     args = parser.parse_args()
     # update args default arguments
     update_default_config(args)
@@ -79,9 +79,10 @@ def get_args():
 
 
 def main():
-    global args, best_valid_f1, start_time, vocab_sizes, field_idx, plogger
+    global args, best_valid_f1, start_time, vocab_sizes
+    plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
     # create model
-    model = create_model(args, plogger, vocab_sizes[field_idx])
+    model = create_model(args, plogger, vocab_sizes)
     plogger.info(vars(args))
     # optimizer
     opt_metric = nn.CrossEntropyLoss(reduction='none').cuda()
@@ -97,13 +98,22 @@ def main():
         # train and eval
         run(epoch, model, train_loaders, opt_metric, plogger, optimizer=optimizer)
         valid_precision, valid_recall, valid_f1 = run(epoch, model, [valid_loader], opt_metric, plogger, namespace='val')
-        test_precidion, test_recall, test_f1 = run(epoch, model, [test_loader], opt_metric, plogger, namespace='test')
+        test_precidion, test_recall, test_f1 = \
+            run(epoch, model.module, [test_loader], opt_metric, plogger, namespace='test')
 
         # record best f1 and save checkpoint
+        global label, local_weight, global_weight, seq_len
         if valid_f1 > best_valid_f1:
             patience_cnt = 0
             best_valid_f1, best_test_f1, best_precision, best_recall = valid_f1, test_f1, test_precidion, test_recall
             plogger.info(f'best test: valid {valid_f1:.4f}, test {test_f1:.4f}')
+            with open(f'{args.log_dir}{args.exp_name}/attn_weight.log', 'wb') as dump_file:
+                pickle.dump({
+                    'label': label[:args.nbatch],                           # [bsz]*N
+                    'local_weight': local_weight[:args.nbatch],             # [bsz*max_len*nhid*nfield]*N
+                    'global_weight': global_weight,                         # nhid*nfield
+                    'seq_len': seq_len[:args.nbatch],                       # [bsz]*N
+                }, dump_file)
         else:
             patience_cnt += 1
             plogger.info(f'valid {valid_f1:.4f}, test {test_f1:.4f}')
@@ -112,8 +122,10 @@ def main():
             plogger.info(f'Final best valid f1 {best_valid_f1:.4f}, with test precision {best_precision:.4f} '
                          f'recall {best_recall:.4f} f1 {best_test_f1:.4f}')
             break
+        label, local_weight, global_weight, seq_len = [], [], [], []
 
     plogger.info(f'Total running time: {timeSince(since=start_time)}')
+    remove_logger(plogger)
 
 
 #  train one epoch of train/val/test
@@ -162,6 +174,16 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
             pred = pred.argmax(dim=1)                                               # nwindow*nevent -> nwindow
         all_pred.append(pred.cpu())                                                 # bsz or nwindow
         all_label.append(pred_label.cpu())                                          # bsz or nwindow
+        if namespace == 'test':
+            global label, local_weight, global_weight, seq_len
+            if torch.sum(pred_label).item() > 0:
+                label.append(pred_label.cpu())                                          # bsz
+                attn_weight = model.arm.attn_weight.cpu().clone()                       # (bsz*max_len)*nhid*nfield
+                attn_weight = rearrange(attn_weight,
+                                        '(b t) h e -> b t h e', b=args.bsz)             # bsz*max_len*nhid*nfield
+                local_weight.append(attn_weight)                                        # bsz*max_len*nhid*nfield
+                seq_len.append(features['seq_len'].cpu())                               # bsz
+                global_weight = model.arm.attn_layer.value.detach().cpu().clone()       # nhid*nfield
 
         time_avg.update(time.time() - timestamp); timestamp = time.time()
         if batch_idx % args.report_freq == 0:
@@ -172,40 +194,21 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
     precision, recall, f1 = f1_score(torch.cat(all_pred), torch.cat(all_label))
     plogger.info(f'{namespace}\tTime {timeSince(s=time_avg.sum):>12s}  Accuracy {accuracy_avg.avg:.4f}  '
                  f'Precision {precision:.4f}  Recall {recall:.4f}  F1-score {f1:.4f}  Loss {loss_avg.avg:8.4f}\n')
-    if namespace == 'test':
-        global last_f1, last_loss, current_f1, current_loss
-        last_f1, last_loss, current_f1, current_loss = current_f1, current_loss, f1, loss_avg.avg
     return precision, recall, f1
 
 
 # initialize global variables, load dataset
 args = get_args()
 vocab_sizes = get_vocab_size(args.dataset, args.tabular_cap)
-# prepare all indexes given nfield (always use eventID i.e., the last fields)
-field_idx_set = obtain_all_field_index(vocab_sizes.size(0) - 1, args.nfield)
-f1_avg, loss_avg, last_f1, last_loss, current_f1, current_loss = AverageMeter(), AverageMeter(), 0., 0., 0., 0.
-args.exp_name = f'{args.exp_name}_{args.seed}'
-for idx, field_idx in enumerate(field_idx_set):
-    field_idx = list(field_idx) + [len(vocab_sizes)-1]
-
-    train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.session_based,
-      args.feature_code, args.shuffle, args.only_normal, args.valid_perc, args.test_perc, args.nenv,
-      args.session_len, args.step_size, args.bsz, args.nworker, field_idx)
-
+train_loaders, valid_loader, test_loader = log_loader(args.data_path, args.nstep, vocab_sizes, args.session_based,
+  args.feature_code, args.shuffle, args.only_normal, args.valid_perc, args.test_perc, args.nenv,
+  args.session_len, args.step_size, args.bsz, args.nworker)
+start_time, best_valid_f1, base_exp_name = time.time(), -100., args.exp_name
+label, local_weight, global_weight, seq_len = [], [], [], []
+for args.seed in range(args.seed, args.seed+args.repeat):
+    seed_everything(args.seed)
+    args.exp_name = f'{base_exp_name}_{args.seed}'
+    if not os.path.isdir(f'{args.log_dir}{args.exp_name}'):
+        os.makedirs(f'{args.log_dir}{args.exp_name}', exist_ok=True)
+    main()
     start_time, best_valid_f1 = time.time(), -100.
-    for seed in range(args.seed, args.seed+args.repeat):
-        seed_everything(seed)
-        if not os.path.isdir(f'{args.log_dir}{args.exp_name}'):
-            os.makedirs(f'{args.log_dir}{args.exp_name}', exist_ok=True)
-        plogger = logger(f'{args.log_dir}{args.exp_name}/stdout.log', True, True)
-        plogger.info(f'field_idx {idx}/{len(field_idx_set)}: {field_idx}')
-        plogger.info(f'original vocab: {vocab_sizes}, field idx: {field_idx}')
-        plogger.info(f'current partial vocab: {vocab_sizes[field_idx]}')
-
-        main()
-        start_time, best_valid_f1 = time.time(), -100.
-
-        f1_avg.update(last_f1)
-        loss_avg.update(last_loss)
-        plogger.info(f'Current average f1 {f1_avg.avg: 8.4f}\tloss {loss_avg.avg: 8.4f}\n')
-        remove_logger(plogger)
