@@ -295,7 +295,7 @@ def log_loader(data_path: str, nstep: int, vocab_sizes: LongTensor, session_base
     shuffle_dataset, shuffle_testset = decode_shuffle_code(shuffle)
     if shuffle_dataset: random.shuffle(data)
 
-    # whether to mask certain fields of data
+    # whether to mask certain fields of data, for training with partial fields
     if field_idx is not None:
         vocab_sizes = vocab_sizes[field_idx]
         data = index_data_field(data, field_idx)

@@ -3,6 +3,8 @@ import time
 import argparse
 from typing import Tuple
 import pickle
+import sys
+sys.path.append('../')
 
 import torch
 from torch import nn
@@ -57,7 +59,7 @@ def get_args():
         '[whole dataset, valid+test set] <-> [0/1][0/1] see data_loader.decode_shuffle_code/log_loader')
     parser.add_argument("--only_normal", action="store_true", default=False, help="only train using normal log seq")
     parser.add_argument('--dataset', type=str, default='hdfs', help='dataset name for data_loader')
-    parser.add_argument('--data_path', type=str, default='./data/Drain_result/HDFS.log_all.log', help='path')
+    parser.add_argument('--data_path', type=str, default='../data/Drain_result/HDFS.log_all.log', help='path')
     parser.add_argument('--test_perc', default=0.5, type=float, help='train/test data split perc among all data')
     parser.add_argument('--valid_perc', default=0.2, type=float, help='valid data split over test set')
     parser.add_argument('--nworker', default=0, type=int, help='number of data loading workers')
