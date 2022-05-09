@@ -58,6 +58,5 @@ semantic_encoder = SemanticEncode(input_dir=output, filename=setting['log_file']
 semantic_encoder.extract_domain_info()
 
 # build an embedding vector for each log message via embedding lookup, and generate one file
-#
 embedder = embed.Embedder(path=output)
 embedder.embed(log_file)
