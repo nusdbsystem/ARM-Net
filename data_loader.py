@@ -32,7 +32,7 @@ def uci_loader(data_dir, batch_size=0, valid_perc=0., workers=2, verbose=True):
         return DataLoader(
             dataset=TensorDataset(*[torch.from_numpy(e) for e in [X, y]]),
             batch_size=batch_size,
-            shuffle=transformer is None,
+            shuffle=True,
             num_workers=workers,
             pin_memory=True,
             drop_last=drop_last
