@@ -68,7 +68,7 @@ def get_args():
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to store log')
     parser.add_argument('--report_freq', type=int, default=50, help='report frequency')
     parser.add_argument('--seed', type=int, default=2022, help='seed for reproducibility')
-    parser.add_argument('--repeat', type=int, default=5, help='number of repeats with seeds [seed, seed+repeat)')
+    parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     # update args default arguments
     update_default_config(args)
@@ -82,7 +82,8 @@ def main():
     model = create_model(args, plogger, vocab_sizes)
     plogger.info(vars(args))
     # optimizer
-    opt_metric = nn.CrossEntropyLoss(reduction='none').cuda()
+    opt_metric = nn.CrossEntropyLoss(reduction='none')
+    if torch.cuda.is_available(): opt_metric.cuda()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     # gradient clipping
     for p in model.parameters():
@@ -123,7 +124,9 @@ def run(epoch, model, data_loaders, opt_metric, plogger, optimizer=None, namespa
 
     time_avg, loss_avg, accuracy_avg = AverageMeter(), AverageMeter(), AverageMeter()
     timestamp, precision, recall, f1, all_pred, all_label = time.time(), 0., 0., 0., [], []
-    if args.irm: dummy_w = IRM.dummy_w.cuda()                                       # 1
+    if args.irm:
+        dummy_w = IRM.dummy_w
+        if torch.cuda.is_available(): dummy_w = dummy_w.cuda()                      # 1
 
     loader = Randomizer.data_generator(data_loaders, args.rand_type, max_nbatch=args.eval_freq)
     for env_idx, batch_idx, batch in loader:

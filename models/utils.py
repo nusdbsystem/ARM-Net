@@ -102,6 +102,6 @@ def create_model(args, logger, vocab_sizes):
         else:
             raise NotImplementedError
 
-    model = torch.nn.DataParallel(model).cuda()
+    if torch.cuda.is_available(): model = torch.nn.DataParallel(model).cuda()
     logger.info(f'{model}\nmodel parameters: {sum([p.data.nelement() for p in model.parameters()])}')
     return model
