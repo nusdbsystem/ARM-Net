@@ -21,15 +21,15 @@ def get_args():
     parser.add_argument('--nfield', type=int, default=10, help='the number of fields')
     parser.add_argument('--nemb', type=int, default=10, help='embedding size')
     parser.add_argument('--k', type=int, default=3, help='interaction order for hofm/dcn/cin/gcn/gat/xdfm')
-    parser.add_argument('--h', type=int, default=600, help='afm/cin/afn/armnet/gcn/gat hidden features/neurons')
+    parser.add_argument('--h', type=int, default=128, help='afm/cin/afn/armnet/gcn/gat hidden features/neurons')
     parser.add_argument('--mlp_nlayer', type=int, default=2, help='the number of mlp layers')
-    parser.add_argument('--mlp_nhid', type=int, default=300, help='mlp hidden units')
+    parser.add_argument('--mlp_nhid', type=int, default=256, help='mlp hidden units')
     parser.add_argument('--dropout', default=0.0, type=float, help='dropout rate')
     parser.add_argument('--nattn_head', type=int, default=4, help='the number of attention heads, gat/armnet')
     # for AFN/ARMNet
     parser.add_argument('--ensemble', action='store_true', default=False, help='to ensemble with DNNs')
     parser.add_argument('--dnn_nlayer', type=int, default=2, help='the number of mlp layers')
-    parser.add_argument('--dnn_nhid', type=int, default=300, help='mlp hidden units')
+    parser.add_argument('--dnn_nhid', type=int, default=256, help='mlp hidden units')
     parser.add_argument('--alpha', default=1.7, type=float, help='entmax alpha to control sparsity')
     # optimizer
     parser.add_argument('--epoch', type=int, default=100, help='number of maximum epochs')
@@ -44,7 +44,7 @@ def get_args():
     # log & checkpoint
     parser.add_argument('--log_dir', type=str, default='./log/', help='path to dataset')
     parser.add_argument('--report_freq', type=int, default=30, help='report frequency')
-    parser.add_argument('--seed', type=int, default=2020, help='seed for reproducibility')
+    parser.add_argument('--seed', type=int, default=2025, help='seed for reproducibility')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeats with seeds [seed, seed+repeat)')
     args = parser.parse_args()
     return args
